@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9,6 +10,10 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List
 import uuid
 from datetime import datetime, timezone
+
+STATIC_DIR = Path(__file__).parent / "static"
+TEMPLATE_PDF = STATIC_DIR / "Internship_Certificate_Template.pdf"
+ORIGINAL_PDF = STATIC_DIR / "Aravind_Krishna_Original.pdf"
 
 
 ROOT_DIR = Path(__file__).parent
@@ -41,6 +46,36 @@ class StatusCheckCreate(BaseModel):
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
+
+
+@api_router.get("/template/download")
+async def download_template():
+    """Download the editable Internship Certificate template PDF."""
+    return FileResponse(
+        path=str(TEMPLATE_PDF),
+        media_type="application/pdf",
+        filename="Internship_Certificate_Template.pdf",
+    )
+
+
+@api_router.get("/template/original")
+async def download_original():
+    """Download the original (reference) certificate PDF."""
+    return FileResponse(
+        path=str(ORIGINAL_PDF),
+        media_type="application/pdf",
+        filename="Aravind_Krishna_Original.pdf",
+    )
+
+
+@api_router.get("/template/preview")
+async def preview_template():
+    """Inline preview of the editable template PDF (for iframe rendering)."""
+    return FileResponse(
+        path=str(TEMPLATE_PDF),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="Internship_Certificate_Template.pdf"'},
+    )
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
