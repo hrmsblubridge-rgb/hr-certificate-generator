@@ -40,17 +40,17 @@ spacing, margins, header, footer, logo, signature, layout).
 - [x] No additional fields, no wording changes, no design changes
 - [x] Output is a downloadable PDF preserving original appearance
 
-## Implemented (2026-01-16)
-- PyMuPDF-based, deterministic template generator (`/app/work/make_editable.py`)
-- AcroForm widgets with embedded Roboto-Bold for typed text
-- FastAPI download/preview endpoints
-- Minimal React UI with download CTAs and live preview
+## Implemented
+- **v1 (2026-01-16)** PyMuPDF-based, deterministic template generator (`/app/work/make_editable.py`) producing an AcroForm-fillable PDF. Wired widgets to the embedded Roboto-Bold via AcroForm `/DR`.
+- **v2 (2026-01-17)** Switched delivery model per user request: instead of AcroForm fields (which felt like "editing" and didn't persist data reliably across PDF apps), built a "type → download" flow.
+   - Backend `POST /api/template/generate` takes the 4 values and bakes them directly into the original PDF content stream using a **bundled full-coverage Roboto-Bold TTF** (`backend/static/fonts/Roboto-Bold.ttf`, from fontsource / Google Fonts / Apache 2.0). Same font, size, weight, color and position as the original values. Zero form fields, zero editing chrome.
+   - Frontend: single-page form with 4 inputs + live preview + "Generate & download PDF" button.
+   - The bundled font replaces the subsetted Roboto-Bold pulled from the source PDF (which lacked glyphs the certificate never used, e.g. "/"), so HR can use any date format or character.
 
-## Verification
-- 4 form fields detected at correct rects with `/DA` referencing `/RobotoB 10pt`
-- Original four value strings no longer present in page text
-- All surrounding wording, header, footer, signature, logo preserved
-- Public URLs return `application/pdf` 200 OK
+## Verification (v2)
+- `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`
+- Downloaded PDF: 0 form fields, all 4 values present in content stream, original Aravind values removed, all surrounding wording / signature / footer intact
+- Visual: values render in Roboto-Bold 10pt navy color, same line, same baseline as original — indistinguishable from an originally-issued certificate
 
 ## Backlog / Future
 - Optional: web-based fill-in form (HR types values in the browser, server
