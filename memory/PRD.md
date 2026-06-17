@@ -42,7 +42,10 @@ spacing, margins, header, footer, logo, signature, layout).
 
 ## Implemented
 - **v1 (2026-01-16)** PyMuPDF-based, deterministic template generator (`/app/work/make_editable.py`) producing an AcroForm-fillable PDF. Wired widgets to the embedded Roboto-Bold via AcroForm `/DR`.
-- **v4 (2026-01-17)** Added a **second template — Internship Offer Letter** as a separate menu entry. Same "type → download" UX. The 7-page Offer Letter source PDF (`backend/static/Offer_Letter_Original.pdf`) is preserved exactly; only the following editable fields are baked in by HR:
+- **v5 (2026-01-17)** Fixed two alignment issues reported on the Offer Letter:
+   1. **Double ₹ symbol** — when HR typed the salary with the rupee prefix already (`₹23000/-`), the backend was adding another one. Backend now strips any leading currency prefix (`₹`, `Rs.`, `Rs`, `INR`) and trailing `/-` from the user input before re-emitting `₹<amount>/-`.
+   2. **Right margin mis-alignment** — the original body paragraphs are *justified* to x=547pt, but our replaced lines were rendering left-aligned, ending short of the right margin. Added a manual word-spacing justifier (`_render_justified`) that tokenises segments into word/space tokens and distributes the extra width evenly across word gaps. The three INTERIOR justified lines (salary, commencement, annexure stipend) now end at x=546.99 — matching the original 547pt edge to within 0.01pt. Last lines of paragraphs (designation, address block, Dear, headers) remain left-aligned as in the original.
+- **v4 (2026-01-17)** Added a **second template — Internship Offer Letter** as a separate menu entry. Same "type → download" UX. Editable fields:
    - Ref Code (appears once, after `CHN/2026/INT/1-`)
    - Date (reflects in 2 places: header `Date:` AND `commence on <date>` sentence)
    - Name (reflects in 2 places: address block bold heading AND `Dear` greeting)
