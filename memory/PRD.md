@@ -42,7 +42,16 @@ spacing, margins, header, footer, logo, signature, layout).
 
 ## Implemented
 - **v1 (2026-01-16)** PyMuPDF-based, deterministic template generator (`/app/work/make_editable.py`) producing an AcroForm-fillable PDF. Wired widgets to the embedded Roboto-Bold via AcroForm `/DR`.
-- **v3 (2026-01-17)** Fixed spacing artifact reported by user: when typed value is shorter than original placeholder, leftover blank space was visible. Switched from "redact each value + reposition" to "redact entire two-line paragraph + reflow with `insert_htmlbox`". The whole body paragraph is now rebuilt from the four entered values using mixed `<b>` inline markup with both Roboto-Regular and Roboto-Bold (bundled at backend/static/fonts/). Result: paragraph reflows naturally, spacing is always normal regardless of value length, baselines (y=212.16, y=232.16) and 20pt line-height exactly match the original document.
+- **v4 (2026-01-17)** Added a **second template — Internship Offer Letter** as a separate menu entry. Same "type → download" UX. The 7-page Offer Letter source PDF (`backend/static/Offer_Letter_Original.pdf`) is preserved exactly; only the following editable fields are baked in by HR:
+   - Ref Code (appears once, after `CHN/2026/INT/1-`)
+   - Date (reflects in 2 places: header `Date:` AND `commence on <date>` sentence)
+   - Name (reflects in 2 places: address block bold heading AND `Dear` greeting)
+   - Address line 1, 2, 3
+   - Phone, Email
+   - Designation
+   - Salary Amount (reflects in 2 places: body paragraph `₹X/-` AND annexure clause 1)
+   - Salary in Words (body paragraph)
+  Implementation: `backend/offer_letter.py` is a config-driven per-line redact+re-render pipeline. Each editable line is white-out then redrawn segment-by-segment using bundled Arimo Regular/Bold (Arial-metric-equivalent, Apache 2.0). Position, font, size (11pt), weight, color (#000) are preserved exactly. Backend endpoint: `POST /api/offer/generate`. Frontend: `OfferLetterView` with a top-tab menu in `App.js` switching between the two templates. PDF download verified end-to-end through the public URL: 7 pages preserved, all entered values present, annexure pages and signature block intact.
 
 ## Verification (v2)
 - `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`

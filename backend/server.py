@@ -174,6 +174,38 @@ async def generate_certificate(req: CertificateRequest):
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
+
+# ---------------------------------------------------------------------------
+# Internship Offer Letter generator
+# ---------------------------------------------------------------------------
+from offer_letter import build_offer_letter
+
+
+class OfferRequest(BaseModel):
+    ref_code:       str = Field(min_length=1, max_length=40)
+    date:           str = Field(min_length=1, max_length=40)
+    name:           str = Field(min_length=1, max_length=120)
+    addr1:          str = Field(min_length=1, max_length=160)
+    addr2:          str = Field(min_length=1, max_length=160)
+    addr3:          str = Field(min_length=1, max_length=160)
+    phone:          str = Field(min_length=1, max_length=40)
+    email:          str = Field(min_length=1, max_length=120)
+    designation:    str = Field(min_length=1, max_length=120)
+    salary_amount:  str = Field(min_length=1, max_length=40)
+    salary_words:   str = Field(min_length=1, max_length=120)
+
+
+@api_router.post("/offer/generate")
+async def generate_offer(req: OfferRequest):
+    pdf_bytes = build_offer_letter(req.model_dump())
+    safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Offer"
+    filename = f"Offer_Letter_{safe_name.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
     status_dict = input.model_dump()
