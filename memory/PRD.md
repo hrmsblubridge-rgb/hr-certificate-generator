@@ -42,10 +42,7 @@ spacing, margins, header, footer, logo, signature, layout).
 
 ## Implemented
 - **v1 (2026-01-16)** PyMuPDF-based, deterministic template generator (`/app/work/make_editable.py`) producing an AcroForm-fillable PDF. Wired widgets to the embedded Roboto-Bold via AcroForm `/DR`.
-- **v2 (2026-01-17)** Switched delivery model per user request: instead of AcroForm fields (which felt like "editing" and didn't persist data reliably across PDF apps), built a "type → download" flow.
-   - Backend `POST /api/template/generate` takes the 4 values and bakes them directly into the original PDF content stream using a **bundled full-coverage Roboto-Bold TTF** (`backend/static/fonts/Roboto-Bold.ttf`, from fontsource / Google Fonts / Apache 2.0). Same font, size, weight, color and position as the original values. Zero form fields, zero editing chrome.
-   - Frontend: single-page form with 4 inputs + live preview + "Generate & download PDF" button.
-   - The bundled font replaces the subsetted Roboto-Bold pulled from the source PDF (which lacked glyphs the certificate never used, e.g. "/"), so HR can use any date format or character.
+- **v3 (2026-01-17)** Fixed spacing artifact reported by user: when typed value is shorter than original placeholder, leftover blank space was visible. Switched from "redact each value + reposition" to "redact entire two-line paragraph + reflow with `insert_htmlbox`". The whole body paragraph is now rebuilt from the four entered values using mixed `<b>` inline markup with both Roboto-Regular and Roboto-Bold (bundled at backend/static/fonts/). Result: paragraph reflows naturally, spacing is always normal regardless of value length, baselines (y=212.16, y=232.16) and 20pt line-height exactly match the original document.
 
 ## Verification (v2)
 - `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`
