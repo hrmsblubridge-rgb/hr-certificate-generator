@@ -31,7 +31,7 @@ PARA_REDACT_RECT = fitz.Rect(42.06, 207.0, 561.0, 252.0)
 # original y (212.16) given line-height=20pt; bottom extended so the Story
 # renderer never auto-shrinks the font below 10pt.
 PARA_DRAW_RECT   = fitz.Rect(42.06, 198.43, 561.0, 398.43)
-TEXT_COLOR_HEX   = "#232369"   # original dark navy
+TEXT_COLOR_HEX   = "#231F20"   # original "rich black" of the body text
 FONT_SIZE        = 10
 LINE_HEIGHT_PT   = 20          # original line spacing (20pt between baselines)
 
@@ -42,7 +42,7 @@ ORIG_VALUES = {
     "commenced":   "28.07.2025",
     "concluded":   "24.11.2025",
 }
-TEXT_COLOR = (0.137, 0.137, 0.231)
+TEXT_COLOR = (0x23/255, 0x1F/255, 0x20/255)   # same #231F20 in RGB tuple
 
 
 ROOT_DIR = Path(__file__).parent
