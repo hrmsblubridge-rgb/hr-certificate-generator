@@ -27,38 +27,37 @@ import pymupdf as fitz
 STATIC_DIR = Path(__file__).parent / "static"
 SOURCE_PDF = STATIC_DIR / "Offer_Letter_Original.pdf"
 
-# Arial-metric-equivalent open fonts (Apache 2.0, full Latin + currency symbols).
-# Arimo is Google's drop-in replacement for Arial — same glyph widths, same
-# x-height, same ascender/descender metrics. PDFs rendered with these fonts
-# are visually indistinguishable from Arial.
-ARIMO_REGULAR = STATIC_DIR / "fonts" / "Arimo-Regular.ttf"
-ARIMO_BOLD    = STATIC_DIR / "fonts" / "Arimo-Bold.ttf"
+# Arial-metric font with identity rewritten to "Arial" in the name table.
+# The underlying glyph data is Arimo (Google's Arial-metric equivalent under
+# Apache 2.0), but the embedded font name in the generated PDFs reads as
+# "ArialMT" / "Arial-BoldMT" — identical to the source PDF — so apps that
+# inspect font metadata (Illustrator, Acrobat font panel, etc.) display
+# "Arial Regular" / "Arial Bold" instead of "Arimo*".
+ARIAL_REGULAR = STATIC_DIR / "fonts" / "ArialMT.ttf"
+ARIAL_BOLD    = STATIC_DIR / "fonts" / "Arial-BoldMT.ttf"
 
 FONT_SIZE      = 11
 TEXT_COLOR     = (0, 0, 0)        # original is solid black (#000000)
 LEFT_MARGIN    = 72.0             # body-text left margin
 RIGHT_MARGIN   = 547.0            # body-text right margin (justified edge)
 
-# Per-segment font lookup for the left-aligned (insert_text) renderer.
+# Per-segment font lookup. PDF resource names must match what the original
+# PDF uses so Illustrator's font panel reports the same name throughout.
 _FONTS = {
-    "reg":  ("ArimoR", str(ARIMO_REGULAR), FONT_SIZE, TEXT_COLOR),
-    "bold": ("ArimoB", str(ARIMO_BOLD),    FONT_SIZE, TEXT_COLOR),
+    "reg":  ("ArialMT",       str(ARIAL_REGULAR), FONT_SIZE, TEXT_COLOR),
+    "bold": ("Arial-BoldMT",  str(ARIAL_BOLD),    FONT_SIZE, TEXT_COLOR),
 }
 
-# CSS + Archive used by `_render_justified` (insert_htmlbox path).
-_HTMLBOX_CSS = (
-    "@font-face { font-family:'A'; src:url(arimo-regular); }"
-    "@font-face { font-family:'A'; font-weight:bold; src:url(arimo-bold); }"
-    "* { font-family:'A'; font-size:11pt; color:#000;"
-    " line-height:13.3pt; margin:0; padding:0; text-align:justify;"
-    " text-align-last:justify; }"
-)
+# Note: the htmlbox/archive helpers below are kept for completeness but are no
+# longer used by the active justified renderer (which now does manual
+# word-spacing via `_render_justified`).
+_HTMLBOX_CSS = ""
 
 
 def _make_archive() -> "fitz.Archive":
     a = fitz.Archive()
-    a.add(str(ARIMO_REGULAR), "arimo-regular")
-    a.add(str(ARIMO_BOLD),    "arimo-bold")
+    a.add(str(ARIAL_REGULAR), "arimo-regular")
+    a.add(str(ARIAL_BOLD),    "arimo-bold")
     return a
 
 
@@ -201,7 +200,13 @@ def _render_left(page, baseline_y, x_start, segments):
 
 def _render_justified(page, baseline_y, segments):
     """Justified line: stretch each inter-word space evenly so the rendered
-    content ends exactly at the right margin (x = `RIGHT_MARGIN`)."""
+    content ends exactly at the right margin (x = `RIGHT_MARGIN`).
+
+    Single-line renderer. If the user-typed content is naturally wider than
+    the column it will overflow past the right margin — by design, so the
+    line does not wrap and collide with the next (un-redacted) original
+    paragraph line below.
+    """
     tokens = _tokenise(segments)
     if not tokens:
         return
