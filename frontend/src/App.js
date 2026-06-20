@@ -32,9 +32,12 @@ function App() {
       <header className="border-b border-[#1a1a1f]/10 bg-[#f6f4ef]/95 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-md bg-[#232369] grid place-items-center text-white">
-              <FileText size={18} />
-            </div>
+            <img
+              src="/img/blubridge-logo.webp"
+              alt="BluBridge"
+              className="h-9 w-auto"
+              draggable={false}
+            />
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-[#1a1a1f]/60">
                 BluBridge HR

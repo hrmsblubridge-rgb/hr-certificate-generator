@@ -34,19 +34,16 @@ export default function Login({ onSuccess }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-between bg-[#efe6e0] py-14 px-6">
+    <div className="min-h-screen flex flex-col items-center justify-between bg-[#e8e4dc] py-14 px-6">
       <div className="flex-1 w-full flex flex-col items-center justify-center">
         {/* Logo */}
-        <div className="mb-10 flex items-center gap-1 select-none">
-          <span className="text-[28px] font-black tracking-tight text-[#0a1024]">
-            BLU
-          </span>
-          <span className="inline-flex items-center justify-center w-10 h-10 rounded-md bg-[#0a1024]">
-            <span className="text-white font-black text-xl leading-none">B</span>
-          </span>
-          <span className="text-[28px] font-black tracking-tight text-[#0a1024]">
-            ridge
-          </span>
+        <div className="mb-10 select-none">
+          <img
+            src="/img/blubridge-logo.webp"
+            alt="BluBridge"
+            className="h-14 w-auto"
+            draggable={false}
+          />
         </div>
 
         {/* Card */}
