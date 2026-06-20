@@ -160,3 +160,56 @@ deployment is healthy.
   remains in `CORS_ORIGINS` so existing QA tooling keeps working.
 - No code path inspects a literal database name — `db = client[os.environ['DB_NAME']]`
   in `server.py` (line 19) is the single source of truth.
+
+
+---
+
+## Render — single-service deployment (Web Service)
+
+The FastAPI backend already serves the compiled React app from
+`frontend/build/` (see `server.py` → "Frontend build mounted"), so a
+**single** Render Web Service hosts everything.
+
+### Runtime
+- Python version is pinned in `backend/runtime.txt` → `python-3.12.7`
+  (broad wheel availability; PyMuPDF, bcrypt, motor all ship cp312 wheels).
+- `backend/requirements.txt` is the audited, conflict-free dependency
+  list — no `emergentintegrations`, `starlette` left to the FastAPI
+  resolver.
+
+### Render service settings
+| Setting | Value |
+|---|---|
+| Environment | Python |
+| Root Directory | *(repo root)* |
+| Build Command | `cd frontend && yarn install --frozen-lockfile && REACT_APP_BACKEND_URL=https://certify.blubrg.com yarn build && cd ../backend && pip install -r requirements.txt` |
+| Start Command | `cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/api/history?limit=1` |
+
+### Required environment variables (Render → Environment)
+```
+MONGO_URL=mongodb+srv://hrCert:hrCertPassword@cluster0.38mxaav.mongodb.net/?appName=Cluster0&retryWrites=true&w=majority
+DB_NAME=hr_certificates
+CORS_ORIGINS=https://certify.blubrg.com
+JWT_SECRET=<generate a 64-char random string>
+HR_USERNAME=admin
+HR_PASSWORD=<strong password>
+COOKIE_SECURE=true
+PYTHON_VERSION=3.12.7
+```
+
+### Why the previous build failed (fixed)
+1. `emergentintegrations==0.2.0` — internal-only package, not on PyPI →
+   removed.
+2. `fastapi==0.110.1` + `starlette<0.37` pinned together — over-constrained
+   for Python 3.12 → upgraded to `fastapi==0.115.6` and removed the
+   explicit `starlette` pin (FastAPI declares its own range).
+3. No Python pin — Render was attempting the latest 3.13/3.14 where
+   some wheels are missing → pinned via `runtime.txt`.
+
+### Post-deploy smoke (Render console shell)
+```bash
+curl -sS https://certify.blubrg.com/api/history?limit=1
+```
+A `200 OK` JSON response with `{"items":[...]}` confirms the build,
+Atlas connection, and SPA mount are healthy.
