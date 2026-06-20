@@ -192,23 +192,65 @@ def sanitize_text(value: str, *, max_len: int = 200, field: str = "value") -> st
     return v
 
 
-# ------------------------- Admin seeding ---------------------------------------
+# ------------------------- Admin bootstrap & rotation -------------------------
 
-async def seed_admin(db):
-    """Idempotent: ensure the admin user exists with the hashed password the
-    env var dictates. If env password rotates, the hash is updated."""
-    username = os.environ.get("HR_USERNAME", "admin")
-    password = os.environ.get("HR_PASSWORD", "pass123")
+async def bootstrap_admin_if_missing(db) -> bool:
+    """One-shot bootstrap for fresh deployments.
+
+    Behaviour:
+      * If the `users` collection already contains the configured admin row,
+        this function is a NO-OP. Existing hashes are NEVER overwritten —
+        the database is the sole source of truth from that point on.
+      * If the admin row is missing AND `HR_USERNAME` + `HR_PASSWORD` are
+        provided in the environment, seed exactly one admin from those env
+        vars. Once seeded, the operator should delete those env vars from
+        the production environment.
+      * If the row is missing AND no env credentials are provided, log a
+        warning and leave the DB alone. Use `python backend/create_admin.py`
+        on the production shell to bootstrap interactively.
+
+    Returns True if a new admin was inserted, False otherwise.
+    """
+    username = (os.environ.get("HR_USERNAME") or "").strip().lower() or "admin"
     existing = await db.users.find_one({"_id": username})
-    if existing is None:
-        await db.users.insert_one({
-            "_id": username,
-            "password_hash": hash_password(password),
-            "role": "admin",
-            "created_at": datetime.now(timezone.utc),
-        })
-    elif not verify_password(password, existing["password_hash"]):
-        await db.users.update_one(
-            {"_id": username},
-            {"$set": {"password_hash": hash_password(password)}},
-        )
+    if existing is not None:
+        return False  # DB is authoritative; never touch the stored hash.
+
+    password = os.environ.get("HR_PASSWORD") or ""
+    if not password:
+        # No row, no env → operator must run the CLI bootstrap.
+        return False
+
+    await db.users.insert_one({
+        "_id": username,
+        "password_hash": hash_password(password),
+        "role": "admin",
+        "created_at": datetime.now(timezone.utc),
+    })
+    return True
+
+
+async def change_user_password(db, username: str, old: str, new: str) -> None:
+    """Verify `old` against the stored hash and replace it with the hash of
+    `new`. Raises HTTPException(400/401) on validation/verification failure.
+    The plain-text passwords never touch disk or logs."""
+    if not new or len(new) < 8:
+        raise HTTPException(status_code=400,
+                            detail="New password must be at least 8 characters.")
+    if new == old:
+        raise HTTPException(status_code=400,
+                            detail="New password must differ from the current one.")
+    if len(new) > 200:
+        raise HTTPException(status_code=400, detail="New password too long.")
+
+    user = await db.users.find_one({"_id": username})
+    if not user or not verify_password(old, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+
+    await db.users.update_one(
+        {"_id": username},
+        {"$set": {
+            "password_hash": hash_password(new),
+            "password_changed_at": datetime.now(timezone.utc),
+        }},
+    )

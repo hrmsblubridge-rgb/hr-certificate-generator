@@ -18,7 +18,8 @@ load_dotenv()
 from auth import (
     hash_password, verify_password,
     create_access_token, set_session_cookies, clear_session_cookies,
-    issue_csrf_token, require_auth, sanitize_text, seed_admin,
+    issue_csrf_token, require_auth, sanitize_text,
+    bootstrap_admin_if_missing, change_user_password,
     assert_not_locked, register_failed_attempt, clear_failed_attempts,
     COOKIE_ACCESS, COOKIE_CSRF,
 )
@@ -135,6 +136,38 @@ async def logout(response: Response, _: dict = Depends(require_auth)):
 @api_router.get("/auth/me")
 async def me(session: dict = Depends(require_auth)):
     return {"user": {"username": session["sub"], "role": "admin"}}
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password:     str = Field(min_length=8, max_length=200)
+
+
+@api_router.post("/auth/change-password")
+async def change_password(req: ChangePasswordRequest,
+                          request: Request,
+                          response: Response,
+                          session: dict = Depends(require_auth)):
+    """Authenticated admin rotates their own password. The new hash is
+    written to MongoDB; the plain text never leaves this request scope.
+    Brute-force lockout is applied per-IP+username on the current_password
+    check so this endpoint can't be used as an oracle."""
+    username = session["sub"]
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{username}:chpw"
+    await assert_not_locked(db, identifier)
+    try:
+        await change_user_password(db, username, req.current_password, req.new_password)
+    except HTTPException as e:
+        if e.status_code == 401:
+            await register_failed_attempt(db, identifier)
+        raise
+    await clear_failed_attempts(db, identifier)
+    # Invalidate the current session so the user has to sign in with the
+    # new password — this also forces any other open sessions to re-auth
+    # after their JWT expires.
+    clear_session_cookies(response)
+    return {"ok": True}
 
 
 @api_router.get("/template/download")
@@ -455,13 +488,19 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def _on_startup():
-    # Idempotently ensure the admin user exists with the hash of the
-    # configured HR_PASSWORD env var.
-    await seed_admin(db)
+    # One-shot bootstrap: if no admin row exists and HR_USERNAME/HR_PASSWORD
+    # env vars are set, seed a single admin. Existing DB hashes are never
+    # overwritten — the database is the sole source of truth thereafter.
+    seeded = await bootstrap_admin_if_missing(db)
+    if seeded:
+        logger.warning(
+            "Admin bootstrapped from env. Delete HR_USERNAME/HR_PASSWORD "
+            "from your production environment now."
+        )
     # Helpful indexes for the auth collections
     await db.users.create_index("created_at")
     await db.login_attempts.create_index("locked_until")
-    logger.info("Auth ready (admin seeded, indexes ensured).")
+    logger.info("Auth ready (indexes ensured).")
 
 
 @app.on_event("shutdown")

@@ -1,0 +1,55 @@
+{
+  "summary": "Tested DB-as-source-of-truth admin credentials + /api/auth/change-password (backend + frontend). All 9 pytest cases passed; all 5 frontend UI flows passed; admin password restored to pass1234 at the end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_change_password.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "tests_executed": {
+    "backend_pytest_9_of_9_passed": [
+      "TestLogin::test_login_success_sets_cookies",
+      "TestLogin::test_login_wrong_password (401 + 'Invalid username or password.')",
+      "TestChangePasswordGuards::test_no_auth_cookie_returns_401",
+      "TestChangePasswordGuards::test_missing_csrf_header_returns_403 ('CSRF token mismatch')",
+      "TestChangePasswordGuards::test_wrong_current_password_returns_401 ('Current password is incorrect.')",
+      "TestChangePasswordGuards::test_short_new_password_returns_422 (Pydantic min_length=8)",
+      "TestChangePasswordGuards::test_same_as_current_returns_400 ('New password must differ from the current one.')",
+      "TestChangePasswordHappyPath::test_happy_path_and_restore (200 {ok:true}, Set-Cookie Max-Age=0 on both hrcert_session+hrcert_csrf, old pw -> 401, new pw -> 200)",
+      "TestPersistenceAcrossRestart::test_db_authoritative_across_restart (after supervisorctl restart backend: env HR_PASSWORD='pass123' rejected with 401, new DB pw still works -> DB is authoritative)"
+    ],
+    "backend_log_assertion": "Boot log line: 'Auth ready (indexes ensured).' — NOT 'Admin bootstrapped from env.' (correct, admin row already existed)",
+    "create_admin_cli": "python -m py_compile /app/backend/create_admin.py OK (not executed -- stdin-bound)",
+    "frontend_playwright_passed": [
+      "Login with admin/pass1234 succeeds",
+      "Header shows data-testid='change-password-btn'",
+      "Click opens data-testid='change-password-modal' with cp-current, cp-new, cp-confirm, cp-cancel, cp-submit",
+      "Inline 'do not match' error shown in change-password-error when new != confirm",
+      "Happy path: modal closes, user returned to login screen (cookies cleared)",
+      "Old password login -> 401, new password login -> 200",
+      "Restored to pass1234 via UI; final pass1234 login -> 200"
+    ]
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/.env still contains HR_USERNAME=admin and HR_PASSWORD=pass123. This is harmless (bootstrap is no-op while admin row exists) but per /app/memory/test_credentials.md operators should delete these env vars after first deploy. Currently HR_PASSWORD ('pass123') diverges from the real DB password ('pass1234') -- which is actually how we PROVED the DB is authoritative. Production deployments should remove HR_USERNAME/HR_PASSWORD from env now.",
+    "server.py is ~547 lines and mixes auth, PDF gen, history, and SPA-mount in a single file. Consider splitting into routers (auth.py router, pdf.py router, history.py router) per the >700-line guideline as this grows.",
+    "frontend/.env: CORS_ORIGINS='*' with allow_credentials=True in CORSMiddleware is a configuration that browsers reject for cross-origin requests with credentials. Same-origin (current preview deploy) works, but if HR ever opens the API from another origin with cookies, set explicit allowed origins."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_change_password.py (new, 9 pytest cases)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (5/5 flows)"},
+  "test_credentials": "admin / pass1234 (restored at end of all tests; verified via curl after run)",
+  "seed_data_creation": "none -- tests only mutate the admin row temporarily and restore it",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin pw is pass1234. Change-password endpoint shares brute-force lockout via the ':chpw' suffix on identifier; 5 failed current-pw attempts -> 15-min 429. Pydantic 422s do NOT count toward brute-force. After any successful chpw the cookies are cleared so test must re-login. To clear lockouts: db.login_attempts.deleteMany({})."
+}

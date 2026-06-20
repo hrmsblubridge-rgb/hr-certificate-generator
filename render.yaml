@@ -40,10 +40,19 @@ services:
         value: https://certify.blubrg.com
       - key: COOKIE_SECURE
         value: "true"
-      - key: HR_USERNAME
-        value: admin
-      # The following secrets must be set in the Render dashboard
-      # (Environment tab) — they are intentionally NOT defined here:
-      #   MONGO_URL    — MongoDB Atlas connection string
-      #   JWT_SECRET   — 64-char random string
-      #   HR_PASSWORD  — strong admin password
+      # ---------------------------------------------------------------
+      # Secrets — set in the Render Dashboard (Environment tab):
+      #   MONGO_URL   — MongoDB Atlas connection string
+      #   JWT_SECRET  — 64-char random string (always required)
+      #
+      # First-deploy bootstrap only — delete these two from Render once
+      # the admin row exists in MongoDB (look for the log line
+      # "Admin bootstrapped from env. Delete HR_USERNAME/HR_PASSWORD …"):
+      #   HR_USERNAME — initial admin username (e.g. "admin")
+      #   HR_PASSWORD — initial admin password (min 8 chars)
+      #
+      # After deletion, the MongoDB `users` collection is the sole
+      # source of truth. Rotate the password from the in-app
+      # "Change password" UI or by running `python backend/create_admin.py`
+      # on the Render shell.
+      # ---------------------------------------------------------------

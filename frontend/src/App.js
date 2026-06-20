@@ -5,8 +5,9 @@ import OfferLetterView from "./views/OfferLetterView";
 import AcknowledgementView from "./views/AcknowledgementView";
 import HistoryView from "./views/HistoryView";
 import Login from "./views/Login";
+import ChangePasswordModal from "./views/ChangePasswordModal";
 import { apiFetch, apiJSON } from "@/lib/api";
-import { FileText, FileSignature, FileCheck, History, LogOut } from "lucide-react";
+import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound } from "lucide-react";
 
 const MENU = [
   { id: "certificate", label: "Internship Certificate", icon: FileText },
@@ -18,10 +19,13 @@ const MENU = [
 function App() {
   const [authState, setAuthState] = useState("checking"); // checking | in | out
   const [view, setView] = useState("certificate");
+  const [username, setUsername] = useState("");
+  const [showChangePw, setShowChangePw] = useState(false);
 
   const refreshAuth = async () => {
     try {
-      await apiJSON("/auth/me");
+      const { user } = await apiJSON("/auth/me");
+      setUsername(user?.username || "");
       setAuthState("in");
     } catch {
       setAuthState("out");
@@ -81,6 +85,15 @@ function App() {
               })}
             </nav>
             <button
+              data-testid="change-password-btn"
+              onClick={() => setShowChangePw(true)}
+              title="Change password"
+              className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-full text-[#1a1a1f]/70 hover:text-[#1a1a1f] hover:bg-white border border-transparent hover:border-[#1a1a1f]/10 transition-colors"
+            >
+              <KeyRound size={14} />
+              <span className="hidden sm:inline">Change password</span>
+            </button>
+            <button
               data-testid="logout-btn"
               onClick={logout}
               title="Sign out"
@@ -97,6 +110,14 @@ function App() {
         : view === "offer"   ? <OfferLetterView />
         : view === "ack"     ? <AcknowledgementView />
         :                      <HistoryView />}
+
+      {showChangePw && (
+        <ChangePasswordModal
+          username={username}
+          onClose={() => setShowChangePw(false)}
+          onSuccess={() => { setShowChangePw(false); setAuthState("out"); }}
+        />
+      )}
     </div>
   );
 }
