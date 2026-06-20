@@ -142,7 +142,7 @@ def _build_filled_pdf(values: dict) -> bytes:
         f'<b>{e(values["designation"].strip())}</b> with Blubridge '
         f'Technologies Pvt Ltd. His internship tenure commenced on '
         f'<b>{e(values["commenced"].strip())}</b> and concluded on '
-        f'<b>{e(values["concluded"].strip())}</b></p>'
+        f'<b>{e(values["concluded"].strip())}</b>.</p>'
     )
     css = (
         "@font-face { font-family:'R'; src:url(roboto-regular); }"
