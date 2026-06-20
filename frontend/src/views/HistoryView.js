@@ -3,9 +3,7 @@ import {
   Download, Trash2, RefreshCw, FileText, FileSignature, FileCheck,
   Search, Clock, Loader2,
 } from "lucide-react";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { apiFetch, apiJSON, apiBlob, API } from "@/lib/api";
 
 const TYPE_META = {
   certificate: { label: "Internship Certificate", icon: FileText,      color: "#232369" },
@@ -60,8 +58,7 @@ export default function HistoryView() {
       const params = new URLSearchParams();
       if (filterType) params.set("type", filterType);
       if (query.trim()) params.set("q", query.trim());
-      const res = await fetch(`${API}/history?${params.toString()}`);
-      const data = await res.json();
+      const data = await apiJSON(`/history?${params.toString()}`);
       setItems(data.items || []);
     } catch { setItems([]); }
     finally { setLoading(false); }
@@ -69,13 +66,23 @@ export default function HistoryView() {
 
   useEffect(() => { load(); }, [load]);
 
-  const onDownload = (entry) => {
-    window.open(`${API}/history/${entry.id}/download`, "_blank");
+  const onDownload = async (entry) => {
+    try {
+      const blob = await apiBlob(`/history/${entry.id}/download`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = entry.filename || "document.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch { /* ignore — surfaced via UI elsewhere if needed */ }
   };
 
   const onDelete = async (entry) => {
     if (!confirm(`Remove "${entry.filename}" from history?`)) return;
-    await fetch(`${API}/history/${entry.id}`, { method: "DELETE" });
+    await apiFetch(`/history/${entry.id}`, { method: "DELETE" });
     load();
   };
 

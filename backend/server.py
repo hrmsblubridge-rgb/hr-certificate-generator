@@ -1,7 +1,8 @@
-from fastapi import FastAPI, APIRouter
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, APIRouter, Depends, Request, Response, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import io
 import os
@@ -12,6 +13,15 @@ from typing import List
 import uuid
 from datetime import datetime, timezone
 import pymupdf as fitz
+
+load_dotenv()
+from auth import (
+    hash_password, verify_password,
+    create_access_token, set_session_cookies, clear_session_cookies,
+    issue_csrf_token, require_auth, sanitize_text, seed_admin,
+    assert_not_locked, register_failed_attempt, clear_failed_attempts,
+    COOKIE_ACCESS, COOKIE_CSRF,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 TEMPLATE_PDF = STATIC_DIR / "Internship_Certificate_Template.pdf"
@@ -77,8 +87,58 @@ async def root():
     return {"message": "Hello World"}
 
 
+# ---------------------------------------------------------------------------
+# Authentication endpoints (custom JWT + HttpOnly cookie + CSRF double-submit)
+# ---------------------------------------------------------------------------
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "auto").lower()
+
+
+def _is_secure(request: Request) -> bool:
+    if COOKIE_SECURE == "true":  return True
+    if COOKIE_SECURE == "false": return False
+    # auto: derive from request scheme / forwarded proto
+    return request.url.scheme == "https" or \
+           request.headers.get("x-forwarded-proto", "").lower() == "https"
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=200)
+
+
+@api_router.post("/auth/login")
+async def login(req: LoginRequest, request: Request, response: Response):
+    username = req.username.strip().lower()
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{username}"
+    await assert_not_locked(db, identifier)
+
+    user = await db.users.find_one({"_id": username})
+    if not user or not verify_password(req.password, user["password_hash"]):
+        await register_failed_attempt(db, identifier)
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    await clear_failed_attempts(db, identifier)
+    token = create_access_token(username)
+    csrf = issue_csrf_token()
+    set_session_cookies(response, token, csrf, secure=_is_secure(request))
+    return {"user": {"username": username, "role": user.get("role", "admin")},
+            "csrf_token": csrf}
+
+
+@api_router.post("/auth/logout")
+async def logout(response: Response, _: dict = Depends(require_auth)):
+    clear_session_cookies(response)
+    return {"ok": True}
+
+
+@api_router.get("/auth/me")
+async def me(session: dict = Depends(require_auth)):
+    return {"user": {"username": session["sub"], "role": "admin"}}
+
+
 @api_router.get("/template/download")
-async def download_template():
+async def download_template(_: dict = Depends(require_auth)):
     """Download the editable Internship Certificate template PDF."""
     return FileResponse(
         path=str(TEMPLATE_PDF),
@@ -88,7 +148,7 @@ async def download_template():
 
 
 @api_router.get("/template/original")
-async def download_original():
+async def download_original(_: dict = Depends(require_auth)):
     """Download the original (reference) certificate PDF."""
     return FileResponse(
         path=str(ORIGINAL_PDF),
@@ -98,7 +158,7 @@ async def download_original():
 
 
 @api_router.get("/template/preview")
-async def preview_template():
+async def preview_template(_: dict = Depends(require_auth)):
     """Inline preview of the editable template PDF (for iframe rendering)."""
     return FileResponse(
         path=str(TEMPLATE_PDF),
@@ -164,8 +224,11 @@ def _build_filled_pdf(values: dict) -> bytes:
 
 
 @api_router.post("/template/generate")
-async def generate_certificate(req: CertificateRequest):
-    pdf_bytes = _build_filled_pdf(req.model_dump())
+async def generate_certificate(req: CertificateRequest, _: dict = Depends(require_auth)):
+    payload = req.model_dump()
+    for k in ("name", "designation", "commenced", "concluded"):
+        payload[k] = sanitize_text(payload[k], field=k)
+    pdf_bytes = _build_filled_pdf(payload)
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Certificate"
     filename = f"Internship_Certificate_{safe_name.replace(' ', '_')}.pdf"
     await _save_history("certificate", req.name, filename, pdf_bytes,
@@ -201,8 +264,12 @@ class OfferRequest(BaseModel):
 
 
 @api_router.post("/offer/generate")
-async def generate_offer(req: OfferRequest):
-    pdf_bytes = build_offer_letter(req.model_dump())
+async def generate_offer(req: OfferRequest, _: dict = Depends(require_auth)):
+    payload = req.model_dump()
+    for k in ("ref_code","date","name","addr1","addr2","addr3","phone","email",
+              "designation","salary_amount","salary_words"):
+        payload[k] = sanitize_text(payload[k], field=k)
+    pdf_bytes = build_offer_letter(payload)
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Offer"
     filename = f"Offer_Letter_{safe_name.replace(' ', '_')}.pdf"
     await _save_history("offer", req.name, filename, pdf_bytes,
@@ -227,8 +294,11 @@ class AckRequest(BaseModel):
 
 
 @api_router.post("/ack/generate")
-async def generate_ack(req: AckRequest):
-    pdf_bytes = build_acknowledgement(req.model_dump())
+async def generate_ack(req: AckRequest, _: dict = Depends(require_auth)):
+    payload = req.model_dump()
+    for k in ("date","name","marksheet_type"):
+        payload[k] = sanitize_text(payload[k], field=k)
+    pdf_bytes = build_acknowledgement(payload)
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Acknowledgement"
     filename = f"Acknowledgement_{safe_name.replace(' ', '_')}.pdf"
     await _save_history("ack", req.name, filename, pdf_bytes,
@@ -269,7 +339,8 @@ async def _save_history(doc_type: str, name: str, filename: str,
 
 
 @api_router.get("/history")
-async def list_history(type: str | None = None, q: str | None = None, limit: int = 100):
+async def list_history(type: str | None = None, q: str | None = None, limit: int = 100,
+                       _: dict = Depends(require_auth)):
     """List generated documents (newest first). Filter by `type` or `q` (name search)."""
     query: dict = {}
     if type:
@@ -282,7 +353,7 @@ async def list_history(type: str | None = None, q: str | None = None, limit: int
 
 
 @api_router.get("/history/{entry_id}/download")
-async def download_history(entry_id: str):
+async def download_history(entry_id: str, _: dict = Depends(require_auth)):
     """Re-download a previously-generated PDF."""
     entry = await db.history.find_one({"id": entry_id}, {"_id": 0})
     if not entry:
@@ -297,7 +368,7 @@ async def download_history(entry_id: str):
 
 
 @api_router.delete("/history/{entry_id}")
-async def delete_history(entry_id: str):
+async def delete_history(entry_id: str, _: dict = Depends(require_auth)):
     """Remove a single history entry."""
     res = await db.history.delete_one({"id": entry_id})
     return {"deleted": res.deleted_count}
@@ -337,12 +408,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ---------------------------------------------------------------------------
+# Security-headers middleware (Helmet-equivalent for FastAPI)
+# ---------------------------------------------------------------------------
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # Prevent XSS via injected scripts in same-origin context.
+        # 'unsafe-inline' on style-src is needed for the CRA build's inline
+        # critical CSS; script-src stays strict to 'self'.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "img-src 'self' data: https:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(), camera=(), payment=()"
+        )
+        # HSTS only over HTTPS
+        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+            response.headers["Strict-Transport-Security"] = \
+                "max-age=31536000; includeSubDomains"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def _on_startup():
+    # Idempotently ensure the admin user exists with the hash of the
+    # configured HR_PASSWORD env var.
+    await seed_admin(db)
+    # Helpful indexes for the auth collections
+    await db.users.create_index("created_at")
+    await db.login_attempts.create_index("locked_until")
+    logger.info("Auth ready (admin seeded, indexes ensured).")
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

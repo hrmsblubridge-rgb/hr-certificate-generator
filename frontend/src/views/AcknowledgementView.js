@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { apiBlob } from "@/lib/api";
 
 const COMMON_MARKSHEETS = [
   "10th", "12th", "Diploma", "Bachelor's Degree", "Master's Degree",
@@ -42,16 +40,9 @@ export default function AcknowledgementView() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/ack/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const blob = await res.blob();
+      const blob = await apiBlob("/ack/generate", { method: "POST", body: form });
       const safe =
-        form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") ||
-        "Acknowledgement";
+        form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") || "Acknowledgement";
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -73,6 +64,7 @@ export default function AcknowledgementView() {
     <main className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-10">
       <form
         onSubmit={onGenerate}
+        autoComplete="off"
         className="rounded-xl border border-[#1a1a1f]/10 bg-white p-6 h-fit"
         data-testid="ack-generator-form"
       >

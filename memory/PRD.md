@@ -42,6 +42,7 @@ spacing, margins, header, footer, logo, signature, layout).
 
 ## Implemented
 - **v1 (2026-01-16)** PyMuPDF-based, deterministic template generator (`/app/work/make_editable.py`) producing an AcroForm-fillable PDF. Wired widgets to the embedded Roboto-Bold via AcroForm `/DR`.
+- **v12 (2026-01-20)** Server-side security hardening: real auth (bcrypt + PyJWT in HttpOnly+SameSite=Lax cookie), CSRF double-submit, brute-force lockout (5 fails → 15min 429), every `/api` endpoint gated by `Depends(require_auth)`, strict input sanitisation against XSS/HTML/NoSQL/PDF injection, Helmet-equivalent security headers middleware (CSP, HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy), `autoComplete="off"` on all forms, secure cookies auto-enabled when HTTPS. New env vars: `JWT_SECRET`, `HR_USERNAME`, `HR_PASSWORD`, `COOKIE_SECURE`. Verified: unauth → 401, wrong CSRF → 403, brute-force lockout → 429, full UI E2E (login → generate → download → logout) passes.
 - **v11 (2026-01-20)** Added **document generation history**. Every certificate / offer letter / acknowledgement HR generates is now persisted in MongoDB (collection `history`) along with its rendered PDF bytes, recipient name, summary fields, file size and timestamp. A new **History** tab in the navigation lists them newest-first with:
    - Filter pills (All / Certificates / Offer Letters / Acknowledgements)
    - Name search box

@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { apiBlob } from "@/lib/api";
 
 const EMPTY = {
   ref_code: "",
@@ -62,16 +60,9 @@ export default function OfferLetterView() {
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/offer/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const blob = await res.blob();
+      const blob = await apiBlob("/offer/generate", { method: "POST", body: form });
       const safeName =
-        form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") ||
-        "Offer";
+        form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") || "Offer";
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -93,6 +84,7 @@ export default function OfferLetterView() {
     <main className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-10">
       <form
         onSubmit={onGenerate}
+        autoComplete="off"
         className="rounded-xl border border-[#1a1a1f]/10 bg-white p-6 h-fit"
         data-testid="offer-generator-form"
       >

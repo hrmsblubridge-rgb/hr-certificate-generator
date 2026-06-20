@@ -5,6 +5,7 @@ import OfferLetterView from "./views/OfferLetterView";
 import AcknowledgementView from "./views/AcknowledgementView";
 import HistoryView from "./views/HistoryView";
 import Login from "./views/Login";
+import { apiFetch, apiJSON } from "@/lib/api";
 import { FileText, FileSignature, FileCheck, History, LogOut } from "lucide-react";
 
 const MENU = [
@@ -15,21 +16,33 @@ const MENU = [
 ];
 
 function App() {
-  const [authed, setAuthed] = useState(false);
+  const [authState, setAuthState] = useState("checking"); // checking | in | out
   const [view, setView] = useState("certificate");
 
-  useEffect(() => {
+  const refreshAuth = async () => {
     try {
-      if (localStorage.getItem("bb_auth") === "1") setAuthed(true);
-    } catch {}
-  }, []);
-
-  const logout = () => {
-    try { localStorage.removeItem("bb_auth"); } catch {}
-    setAuthed(false);
+      await apiJSON("/auth/me");
+      setAuthState("in");
+    } catch {
+      setAuthState("out");
+    }
   };
 
-  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
+  useEffect(() => { refreshAuth(); }, []);
+
+  const logout = async () => {
+    try { await apiFetch("/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+    setAuthState("out");
+  };
+
+  if (authState === "checking") {
+    return (
+      <div className="min-h-screen grid place-items-center bg-[#e8e4dc] text-[#1a1a1f]/55 text-sm">
+        Loading…
+      </div>
+    );
+  }
+  if (authState === "out") return <Login onSuccess={() => setAuthState("in")} />;
 
   return (
     <div className="min-h-screen bg-[#f6f4ef] text-[#1a1a1f]">
