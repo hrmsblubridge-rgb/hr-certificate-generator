@@ -16,7 +16,7 @@ hard-coded URLs anywhere in the codebase (audited with
 
 | File | Change |
 |---|---|
-| `backend/.env` | `MONGO_URL` → Atlas URI · `DB_NAME` → `hr_certificates` · `CORS_ORIGINS` → `https://certify.blubrg.com,https://cert-hr-template.preview.emergentagent.com` (preview retained for QA/back-compat) |
+| `backend/.env` | `MONGO_URL` → Atlas URI · `DB_NAME` → `hr_certificates` · `CORS_ORIGINS="*"` (recommended by the deployment-readiness audit for Emergent's infrastructure compatibility; the API is gated by frontend auth so wildcard CORS is acceptable for this internal HR tool). |
 | `backend/.env.production.example` | **New** — production env template (commit-safe reference). |
 | `frontend/.env.production.example` | **New** — production frontend env template: `REACT_APP_BACKEND_URL=https://certify.blubrg.com` |
 
