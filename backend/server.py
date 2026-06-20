@@ -179,6 +179,7 @@ async def generate_certificate(req: CertificateRequest):
 # Internship Offer Letter generator
 # ---------------------------------------------------------------------------
 from offer_letter import build_offer_letter
+from acknowledgement import build_acknowledgement
 
 
 class OfferRequest(BaseModel):
@@ -200,6 +201,27 @@ async def generate_offer(req: OfferRequest):
     pdf_bytes = build_offer_letter(req.model_dump())
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Offer"
     filename = f"Offer_Letter_{safe_name.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Letter of Acknowledgement generator
+# ---------------------------------------------------------------------------
+class AckRequest(BaseModel):
+    date:           str = Field(min_length=1, max_length=60)
+    name:           str = Field(min_length=1, max_length=120)
+    marksheet_type: str = Field(min_length=1, max_length=80)
+
+
+@api_router.post("/ack/generate")
+async def generate_ack(req: AckRequest):
+    pdf_bytes = build_acknowledgement(req.model_dump())
+    safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Acknowledgement"
+    filename = f"Acknowledgement_{safe_name.replace(' ', '_')}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",

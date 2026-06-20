@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import "@/App.css";
 import CertificateView from "./views/CertificateView";
 import OfferLetterView from "./views/OfferLetterView";
+import AcknowledgementView from "./views/AcknowledgementView";
 import Login from "./views/Login";
-import { FileText, FileSignature, LogOut } from "lucide-react";
+import { FileText, FileSignature, FileCheck, LogOut } from "lucide-react";
 
 const MENU = [
   { id: "certificate", label: "Internship Certificate", icon: FileText },
-  { id: "offer",       label: "Internship Offer Letter", icon: FileSignature },
+  { id: "offer",       label: "Offer Letter",            icon: FileSignature },
+  { id: "ack",         label: "Acknowledgement",         icon: FileCheck },
 ];
 
 function App() {
@@ -35,17 +37,10 @@ function App() {
             <img
               src="/img/blubridge-logo.webp"
               alt="BluBridge"
-              className="h-9 w-auto"
+              className="w-auto"
               draggable={false}
             />
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-[#1a1a1f]/60">
-                BluBridge HR
-              </div>
-              <div className="text-base font-semibold tracking-tight">
-                Document Generator
-              </div>
-            </div>
+            
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex items-center gap-1 bg-white border border-[#1a1a1f]/10 rounded-full p-1">
@@ -83,7 +78,9 @@ function App() {
         </div>
       </header>
 
-      {view === "certificate" ? <CertificateView /> : <OfferLetterView />}
+      {view === "certificate" ? <CertificateView />
+        : view === "offer"   ? <OfferLetterView />
+        :                      <AcknowledgementView />}
     </div>
   );
 }

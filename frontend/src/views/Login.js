@@ -41,7 +41,7 @@ export default function Login({ onSuccess }) {
           <img
             src="/img/blubridge-logo.webp"
             alt="BluBridge"
-            className="h-14 w-auto"
+            className="w-auto"
             draggable={false}
           />
         </div>
