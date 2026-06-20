@@ -168,6 +168,10 @@ async def generate_certificate(req: CertificateRequest):
     pdf_bytes = _build_filled_pdf(req.model_dump())
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Certificate"
     filename = f"Internship_Certificate_{safe_name.replace(' ', '_')}.pdf"
+    await _save_history("certificate", req.name, filename, pdf_bytes,
+                        summary={"designation": req.designation,
+                                 "commenced": req.commenced,
+                                 "concluded": req.concluded})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -201,6 +205,11 @@ async def generate_offer(req: OfferRequest):
     pdf_bytes = build_offer_letter(req.model_dump())
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Offer"
     filename = f"Offer_Letter_{safe_name.replace(' ', '_')}.pdf"
+    await _save_history("offer", req.name, filename, pdf_bytes,
+                        summary={"ref_code": req.ref_code,
+                                 "date": req.date,
+                                 "designation": req.designation,
+                                 "salary_amount": req.salary_amount})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -222,11 +231,76 @@ async def generate_ack(req: AckRequest):
     pdf_bytes = build_acknowledgement(req.model_dump())
     safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Acknowledgement"
     filename = f"Acknowledgement_{safe_name.replace(' ', '_')}.pdf"
+    await _save_history("ack", req.name, filename, pdf_bytes,
+                        summary={"date": req.date,
+                                 "marksheet_type": req.marksheet_type})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# Document generation history
+# ---------------------------------------------------------------------------
+# Each successful PDF generation is persisted in MongoDB so HR can later list
+# what has been generated and re-download any previous document without
+# re-entering the form data.
+
+from bson.binary import Binary
+
+
+async def _save_history(doc_type: str, name: str, filename: str,
+                        pdf_bytes: bytes, summary: dict) -> str:
+    """Persist a generated document. Returns the new history entry id."""
+    entry = {
+        "id":         str(uuid.uuid4()),
+        "type":       doc_type,           # certificate | offer | ack
+        "name":       name,
+        "filename":   filename,
+        "summary":    summary,
+        "size_bytes": len(pdf_bytes),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "pdf":        Binary(pdf_bytes),  # store as BSON Binary
+    }
+    await db.history.insert_one(entry)
+    return entry["id"]
+
+
+@api_router.get("/history")
+async def list_history(type: str | None = None, q: str | None = None, limit: int = 100):
+    """List generated documents (newest first). Filter by `type` or `q` (name search)."""
+    query: dict = {}
+    if type:
+        query["type"] = type
+    if q:
+        query["name"] = {"$regex": q, "$options": "i"}
+    cursor = db.history.find(query, {"pdf": 0, "_id": 0}).sort("created_at", -1).limit(limit)
+    items = await cursor.to_list(length=limit)
+    return {"items": items, "count": len(items)}
+
+
+@api_router.get("/history/{entry_id}/download")
+async def download_history(entry_id: str):
+    """Re-download a previously-generated PDF."""
+    entry = await db.history.find_one({"id": entry_id}, {"_id": 0})
+    if not entry:
+        return StreamingResponse(io.BytesIO(b""), status_code=404)
+    pdf_bytes = bytes(entry["pdf"])
+    filename = entry.get("filename", f"document_{entry_id[:8]}.pdf")
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.delete("/history/{entry_id}")
+async def delete_history(entry_id: str):
+    """Remove a single history entry."""
+    res = await db.history.delete_one({"id": entry_id})
+    return {"deleted": res.deleted_count}
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):

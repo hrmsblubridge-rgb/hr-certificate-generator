@@ -3,13 +3,15 @@ import "@/App.css";
 import CertificateView from "./views/CertificateView";
 import OfferLetterView from "./views/OfferLetterView";
 import AcknowledgementView from "./views/AcknowledgementView";
+import HistoryView from "./views/HistoryView";
 import Login from "./views/Login";
-import { FileText, FileSignature, FileCheck, LogOut } from "lucide-react";
+import { FileText, FileSignature, FileCheck, History, LogOut } from "lucide-react";
 
 const MENU = [
   { id: "certificate", label: "Internship Certificate", icon: FileText },
   { id: "offer",       label: "Offer Letter",            icon: FileSignature },
   { id: "ack",         label: "Acknowledgement",         icon: FileCheck },
+  { id: "history",     label: "History",                  icon: History },
 ];
 
 function App() {
@@ -80,7 +82,8 @@ function App() {
 
       {view === "certificate" ? <CertificateView />
         : view === "offer"   ? <OfferLetterView />
-        :                      <AcknowledgementView />}
+        : view === "ack"     ? <AcknowledgementView />
+        :                      <HistoryView />}
     </div>
   );
 }
