@@ -1,0 +1,49 @@
+# Render Blueprint — single-service deployment for certify.blubrg.com
+# The FastAPI backend serves the React SPA from frontend/build (mounted in
+# server.py). One Render Web Service hosts both the API and the UI.
+#
+# Python version is pinned via three independent mechanisms so Render
+# cannot fall back to its default (currently 3.14):
+#   1. PYTHON_VERSION env var (highest precedence on Render)
+#   2. runtime.txt at repo root
+#   3. .python-version at repo root
+#
+# All other env vars (MONGO_URL, JWT_SECRET, HR_PASSWORD, etc.) are
+# managed in the Render dashboard — never committed.
+
+services:
+  - type: web
+    name: certify-blubrg
+    runtime: python
+    plan: starter
+    region: oregon
+    branch: main
+    rootDir: .
+    buildCommand: |
+      set -e
+      corepack enable
+      cd frontend
+      yarn install --frozen-lockfile
+      REACT_APP_BACKEND_URL=https://certify.blubrg.com yarn build
+      cd ../backend
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/history?limit=1
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DB_NAME
+        value: hr_certificates
+      - key: CORS_ORIGINS
+        value: https://certify.blubrg.com
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: HR_USERNAME
+        value: admin
+      # The following secrets must be set in the Render dashboard
+      # (Environment tab) — they are intentionally NOT defined here:
+      #   MONGO_URL    — MongoDB Atlas connection string
+      #   JWT_SECRET   — 64-char random string
+      #   HR_PASSWORD  — strong admin password
