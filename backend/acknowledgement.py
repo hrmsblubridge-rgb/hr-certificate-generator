@@ -28,14 +28,30 @@ ROBOTO_REGULAR = STATIC_DIR / "fonts" / "Roboto-Regular.ttf"
 ROBOTO_BOLD    = STATIC_DIR / "fonts" / "Roboto-Bold.ttf"
 
 FONT_SIZE     = 10
+SUP_FONT_SIZE = 5.83        # superscript "th"/"st"/"nd"/"rd" — matches source
+SUP_BASELINE_RISE = 3.0     # raise baseline by 3pt for the superscript (per source PDF)
 TEXT_COLOR    = (0x23/255, 0x1F/255, 0x20/255)   # #231F20, the source colour
 LEFT_MARGIN   = 42.06       # body-text left margin
 RIGHT_MARGIN  = 560.17      # body-text right margin (justified edge)
 
 _FONTS = {
-    "reg":  ("RobR", str(ROBOTO_REGULAR), FONT_SIZE, TEXT_COLOR),
-    "bold": ("RobB", str(ROBOTO_BOLD),    FONT_SIZE, TEXT_COLOR),
+    "reg":  ("RobR", str(ROBOTO_REGULAR), FONT_SIZE,     TEXT_COLOR),
+    "bold": ("RobB", str(ROBOTO_BOLD),    FONT_SIZE,     TEXT_COLOR),
+    "sup":  ("RobR", str(ROBOTO_REGULAR), SUP_FONT_SIZE, TEXT_COLOR),
 }
+
+
+def _split_ordinal(text: str):
+    """If `text` is an ordinal like '10th', '12th', '1st', '2nd', '3rd',
+    return (digits, suffix). Otherwise return (text, None).
+
+    The suffix is what should be rendered as superscript.
+    """
+    import re
+    m = re.match(r'^(\d+)(st|nd|rd|th)$', text.strip(), flags=re.IGNORECASE)
+    if not m:
+        return text, None
+    return m.group(1), m.group(2).lower()
 
 # LineReplacement (page, redact_rect, align, baseline_y, x_start, segments)
 LineReplacement = Tuple[int, fitz.Rect, str, float, float, List[Tuple[str, str]]]
@@ -46,6 +62,16 @@ def _build_replacements(v: dict) -> List[LineReplacement]:
     name = v["name"].strip()
     date = v["date"].strip()
     marksheet = v["marksheet_type"].strip()
+
+    # Auto-format the marksheet input. If user typed an ordinal like "10th"
+    # or "12th", split into digit + suffix so the suffix can be rendered as
+    # superscript (matching the source PDF's "10ᵗʰ" styling). For non-ordinal
+    # values like "Bachelor's Degree" we just emit a single regular segment.
+    digits, suffix = _split_ordinal(marksheet)
+    if suffix:
+        marksheet_segments = [(digits, "reg"), (suffix, "sup")]
+    else:
+        marksheet_segments = [(marksheet, "reg")]
 
     return [
         # ---- Date line (y=184.0-197.3) ------------------------------------
@@ -63,12 +89,12 @@ def _build_replacements(v: dict) -> List[LineReplacement]:
              (",", "reg")]),
 
         # ---- Body line containing marksheet (y=315.0-328.3, JUSTIFY) -------
-        # Original: "...of your original 10th Mark Sheet. We understand that the "
-        # We replace just the "10th" placeholder. Line is justified to right
-        # margin to match the original layout.
+        # Original: "...of your original 10ᵗʰ Mark Sheet. We understand that the "
+        # The "th" in the original is rendered as a 5.83pt superscript; we
+        # reproduce that styling automatically for ordinal inputs.
         (0, fitz.Rect(40, 314, 565, 330), "just", 325.5, LEFT_MARGIN,
             [("Blubridge Technologies Pvt Ltd acknowledges the receipt of your original ", "reg"),
-             (marksheet, "reg"),
+             *marksheet_segments,
              (" Mark Sheet. We understand that the ", "reg")]),
     ]
 
@@ -111,7 +137,9 @@ def _render_left(page, baseline_y, x_start, segments):
         if not text:
             continue
         name, file, size, color = _FONTS[fkey]
-        page.insert_text((x, baseline_y), text,
+        # Superscript segments render with their baseline raised.
+        seg_baseline = baseline_y - (SUP_BASELINE_RISE if fkey == "sup" else 0.0)
+        page.insert_text((x, seg_baseline), text,
                          fontname=name, fontfile=file, fontsize=size, color=color)
         x += fitz.Font(fontfile=file).text_length(text, size)
 
@@ -129,7 +157,8 @@ def _render_justified(page, baseline_y, segments):
     for tok in tokens:
         if not tok["is_space"]:
             name, file, size, color = _FONTS[tok["fkey"]]
-            page.insert_text((x, baseline_y), tok["text"],
+            seg_baseline = baseline_y - (SUP_BASELINE_RISE if tok["fkey"] == "sup" else 0.0)
+            page.insert_text((x, seg_baseline), tok["text"],
                              fontname=name, fontfile=file, fontsize=size, color=color)
         x += tok["width"] + (extra_per_space if tok["is_space"] else 0.0)
 
