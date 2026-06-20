@@ -347,3 +347,42 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+# ---------------------------------------------------------------------------
+# Single-service deploy: serve the React frontend's static build from FastAPI
+# ---------------------------------------------------------------------------
+# When the React app is built into ../frontend/build (relative to this file),
+# FastAPI mounts it at "/" and serves index.html for any unknown route so
+# client-side routing keeps working on refresh.
+#
+# This block is a no-op during local development (where the React dev server
+# runs separately on :3000 and there is no build/ folder yet).
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse as _FileResponse
+
+_FRONTEND_BUILD = (Path(__file__).parent.parent / "frontend" / "build").resolve()
+
+if _FRONTEND_BUILD.is_dir() and (_FRONTEND_BUILD / "index.html").is_file():
+    # /static/* is the CRA output path (JS/CSS bundles, etc.).
+    _cra_static = _FRONTEND_BUILD / "static"
+    if _cra_static.is_dir():
+        app.mount("/static", StaticFiles(directory=str(_cra_static)), name="cra-static")
+
+    # SPA fallback: any non-API GET that doesn't match a real file returns
+    # index.html so React Router can take over.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa_fallback(full_path: str):
+        # Never intercept API routes.
+        if full_path.startswith("api/"):
+            return _FileResponse(_FRONTEND_BUILD / "index.html", status_code=404)
+        # Serve a real file from build/ if it exists (favicon, manifest, etc.).
+        candidate = (_FRONTEND_BUILD / full_path).resolve()
+        if candidate.is_file() and str(candidate).startswith(str(_FRONTEND_BUILD)):
+            return _FileResponse(candidate)
+        # Otherwise fall back to index.html.
+        return _FileResponse(_FRONTEND_BUILD / "index.html")
+
+    logger.info("Frontend build mounted from %s", _FRONTEND_BUILD)
+else:
+    logger.info("No frontend build at %s — backend only (dev mode).", _FRONTEND_BUILD)
