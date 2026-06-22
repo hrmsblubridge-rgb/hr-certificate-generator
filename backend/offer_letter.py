@@ -96,7 +96,7 @@ def _build_replacements(v: dict) -> List[LineReplacement]:
         # Left block
         (0, fitz.Rect(72, 151, 280, 168), "left", 162.0, LEFT_MARGIN, 0.0,
             [("Ref: ", "bold"),
-             (f'CHN/2026/INT/1-{v["ref_code"]}\u200b', "reg")]),
+             (f'CHN/2026/INT/1-{v["ref_code"]}', "reg")]),
         # Right block
         (0, fitz.Rect(425, 151, 555, 168), "left", 162.0, 435.75, 0.0,
             [("    ", "reg"),
