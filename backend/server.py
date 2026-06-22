@@ -502,6 +502,9 @@ async def _on_startup():
     await db.login_attempts.create_index("locked_until")
     logger.info("Auth ready (indexes ensured).")
 
+@app.api_route("/health", methods=["GET", "HEAD"])
+async def health():
+    return Response(status_code=200)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
