@@ -255,9 +255,18 @@ def _build_filled_pdf(values: dict) -> bytes:
         pronouns at their original baselines.
     """
     import html as _html
+    import re as _re
     gender      = (values.get("gender") or "male").strip().lower()
     pronoun_lo  = "her" if gender == "female" else "his"
     pronoun_up  = "Her" if gender == "female" else "His"
+    title       = "Ms." if gender == "female" else "Mr."
+
+    # Strip any user-typed leading title (Mr / Mrs / Ms / Miss with optional
+    # period) so we never produce "Mr. Mr. Aravind". The cleaned name is then
+    # prefixed with the gender-correct title inside the bold span.
+    raw_name    = values["name"].strip()
+    cleaned     = _re.sub(r"^(mr|mrs|ms|miss)\.?\s+", "", raw_name, flags=_re.I).strip()
+    display_name = f"{title} {cleaned}" if cleaned else title
 
     doc = fitz.open(str(ORIGINAL_PDF))
     page = doc[0]
@@ -282,7 +291,7 @@ def _build_filled_pdf(values: dict) -> bytes:
     # 3) Rebuild the dynamic top paragraph (lines 1-2).
     e = _html.escape
     body_html = (
-        f'<p>This is to certify that <b>{e(values["name"].strip())}</b> '
+        f'<p>This is to certify that <b>{e(display_name)}</b> '
         f'has completed {pronoun_lo} internship as an '
         f'<b>{e(values["designation"].strip())}</b> with Blubridge '
         f'Technologies Pvt Ltd. {pronoun_up} internship tenure commenced on '
@@ -312,8 +321,13 @@ async def generate_certificate(req: CertificateRequest, _: dict = Depends(requir
     for k in ("name", "designation", "commenced", "concluded"):
         payload[k] = sanitize_text(payload[k], field=k)
     pdf_bytes = _build_filled_pdf(payload)
-    safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Certificate"
-    filename = f"Internship_Certificate_{safe_name.replace(' ', '_')}.pdf"
+    # Strip the user's typed title (if any) so the filename matches the
+    # gender-correct title baked into the PDF.
+    import re as _re
+    bare = _re.sub(r"^(mr|mrs|ms|miss)\.?\s+", "", req.name, flags=_re.I).strip()
+    title_prefix = "Ms" if req.gender == "female" else "Mr"
+    safe_name = "".join(c for c in bare if c.isalnum() or c in " _-").strip() or "Certificate"
+    filename = f"Internship_Certificate_{title_prefix}_{safe_name.replace(' ', '_')}.pdf"
     await _save_history("certificate", req.name, filename, pdf_bytes,
                         summary={"designation": req.designation,
                                  "commenced":   req.commenced,

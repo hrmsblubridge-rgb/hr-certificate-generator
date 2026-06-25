@@ -49,8 +49,14 @@ const PRONOUNS = {
 };
 
 function Preview({ values }) {
-  const show = (v, fallback) => (v && v.trim() ? v : fallback);
   const p = PRONOUNS[values.gender] || PRONOUNS.male;
+  // Gender-driven title: strip any user-typed title first, then prepend the
+  // correct one. Mirrors the backend logic in _build_filled_pdf.
+  const TITLE_RE = /^(mr|mrs|ms|miss)\.?\s+/i;
+  const titleFor = values.gender === "female" ? "Ms." : values.gender === "male" ? "Mr." : "";
+  const baseName = (values.name || "").replace(TITLE_RE, "").trim();
+  const displayName = titleFor && baseName ? `${titleFor} ${baseName}` : baseName;
+  const show = (v, fallback) => (v && v.trim() ? v : fallback);
   return (
     <div
       data-testid="cert-live-preview"
@@ -61,7 +67,7 @@ function Preview({ values }) {
       </div>
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f]">
         This is to certify that{" "}
-        <span className="font-bold">{show(values.name, "____________________")}</span>{" "}
+        <span className="font-bold">{show(displayName, "____________________")}</span>{" "}
         has completed {p.his} internship as an{" "}
         <span className="font-bold">{show(values.designation, "____________________")}</span>{" "}
         with Blubridge Technologies Pvt Ltd. {p.His} internship tenure commenced on{" "}
@@ -115,12 +121,15 @@ export default function CertificateView() {
     setError("");
     try {
       const blob = await apiBlob("/template/generate", { method: "POST", body: form });
+      const TITLE_RE = /^(mr|mrs|ms|miss)\.?\s+/i;
+      const titlePrefix = form.gender === "female" ? "Ms" : "Mr";
+      const bareName = form.name.replace(TITLE_RE, "").trim();
       const safeName =
-        form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") || "Certificate";
+        bareName.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") || "Certificate";
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Internship_Certificate_${safeName}.pdf`;
+      a.download = `Internship_Certificate_${titlePrefix}_${safeName}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -149,7 +158,7 @@ export default function CertificateView() {
 
         <Field
           label="Name"
-          placeholder="e.g. Mr. Rishimithan Kannan"
+          placeholder="e.g. Rishimithan Kannan (no Mr./Ms.)"
           testid="cert-input-name"
           value={form.name}
           onChange={set("name")}
