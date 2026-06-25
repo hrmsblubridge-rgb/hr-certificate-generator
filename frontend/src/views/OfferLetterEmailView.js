@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Loader2, FileText, Download, ExternalLink, X, Pencil, Check } from "lucide-react";
+import { Loader2, FileText, Download, ExternalLink, X, Pencil, Check, Send, Mail } from "lucide-react";
 import { apiJSON } from "@/lib/api";
 
 // ---- shared field components --------------------------------------------
@@ -24,12 +24,21 @@ const selectArrowStyle = {
 };
 
 // ---- preview modal ------------------------------------------------------
-function PreviewModal({ html: initialHtml, filename, onClose }) {
+function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateName, onClose }) {
   // HTML can be MUTATED via the inline edit-content feature, so we hold it
-  // in state. Download / Open / Re-render all read the latest value.
+  // in state. Download / Open / Send all read the latest value.
   const [html, setHtml] = useState(initialHtml);
   const [editing, setEditing] = useState(false);
   const iframeRef = useRef(null);
+
+  // Send-email panel state
+  const [showSend, setShowSend] = useState(false);
+  const [toEmail, setToEmail] = useState(candidateEmail || "");
+  const [subject, setSubject] = useState(
+    candidateName ? `Offer of Appointment — ${candidateName}` : "Offer of Appointment"
+  );
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null); // { ok, message }
 
   // Toggle the iframe body's contenteditable when entering / leaving edit
   // mode. Reads back the edited document on Save so subsequent actions use
@@ -65,6 +74,26 @@ function PreviewModal({ html: initialHtml, filename, onClose }) {
       }
     }
     setEditing((v) => !v);
+  };
+
+  const onSend = async () => {
+    setSendResult(null);
+    if (!toEmail || !/^\S+@\S+\.\S+$/.test(toEmail)) {
+      setSendResult({ ok: false, message: "Enter a valid recipient email." });
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await apiJSON("/offer-email/send", {
+        method: "POST",
+        body: { to_email: toEmail, subject, html, name: candidateName || "" },
+      });
+      setSendResult({ ok: true, message: `Sent to ${toEmail}` + (res.message_id ? ` · id ${res.message_id.slice(0,12)}…` : "") });
+    } catch (e) {
+      setSendResult({ ok: false, message: e.message || "Send failed." });
+    } finally {
+      setSending(false);
+    }
   };
 
   const open = () => {
@@ -160,6 +189,90 @@ function PreviewModal({ html: initialHtml, filename, onClose }) {
             Click anywhere in the preview to edit. Press <strong>Save</strong> when done &mdash; Download and Open in new tab will then use your edited copy.
           </div>
         )}
+        {/* ---------------- Send bar (always visible at the bottom) ---------------- */}
+        <div
+          data-testid="oe-send-bar"
+          className="border-t border-[#1a1a1f]/10 bg-[#f6f4ef] px-5 py-3"
+        >
+          {!showSend ? (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 text-xs text-[#1a1a1f]/70">
+                <Mail size={14} className="text-[#232369]" />
+                {candidateEmail
+                  ? <>Ready to email the candidate at <strong className="text-[#1a1a1f]">{candidateEmail}</strong>.</>
+                  : <>Add a recipient email to send.</>}
+              </div>
+              <button
+                data-testid="oe-open-send"
+                onClick={() => setShowSend(true)}
+                disabled={editing}
+                className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider px-5 py-2.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Send size={14} /> Send Email
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3" data-testid="oe-send-panel">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-3">
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#1a1a1f]/55 mb-1">To</span>
+                  <input
+                    data-testid="oe-send-to"
+                    type="email"
+                    value={toEmail}
+                    onChange={(e) => setToEmail(e.target.value)}
+                    placeholder="candidate@example.com"
+                    className="w-full bg-white border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#1a1a1f]/55 mb-1">Subject</span>
+                  <input
+                    data-testid="oe-send-subject"
+                    type="text"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    className="w-full bg-white border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+              {sendResult && (
+                <div
+                  data-testid="oe-send-result"
+                  className={
+                    "text-xs rounded-md px-3 py-2 border " +
+                    (sendResult.ok
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-red-50 border-red-200 text-red-700")
+                  }
+                >
+                  {sendResult.message}
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  data-testid="oe-send-cancel"
+                  type="button"
+                  onClick={() => { setShowSend(false); setSendResult(null); }}
+                  className="text-sm font-medium px-4 py-2 rounded-full text-[#1a1a1f]/70 hover:text-[#1a1a1f] hover:bg-white border border-transparent hover:border-[#1a1a1f]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  data-testid="oe-send-confirm"
+                  type="button"
+                  onClick={onSend}
+                  disabled={sending}
+                  className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wider px-5 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {sending
+                    ? (<><Loader2 size={14} className="animate-spin" /> Sending…</>)
+                    : (<><Send size={14} /> Send now</>)}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -490,6 +603,8 @@ export default function OfferLetterEmailView() {
         <PreviewModal
           html={preview.html}
           filename={preview.filename}
+          candidateEmail={form.email}
+          candidateName={form.name}
           onClose={() => setPreview(null)}
         />
       )}

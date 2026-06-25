@@ -32,3 +32,6 @@ pymupdf==1.27.2.3              # abi3 wheel — no compilation
 
 # --- Env loading ---
 python-dotenv==1.0.1
+
+# --- Transactional email (SendGrid) ---
+sendgrid==6.12.5

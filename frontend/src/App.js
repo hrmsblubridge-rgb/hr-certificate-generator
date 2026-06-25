@@ -58,7 +58,7 @@ function App() {
             <img
               src="/img/blubridge-logo.webp"
               alt="BluBridge"
-              className="h-7 w-auto"
+              className="w-auto"
               draggable={false}
             />
           </div>

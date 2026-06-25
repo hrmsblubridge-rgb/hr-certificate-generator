@@ -346,6 +346,7 @@ async def generate_certificate(req: CertificateRequest, _: dict = Depends(requir
 from offer_letter import build_offer_letter
 from acknowledgement import build_acknowledgement
 from offer_letter_email import render_offer_letter  # noqa: E402
+from mailer import send_html_email, EmailError  # noqa: E402
 
 
 class OfferRequest(BaseModel):
@@ -466,6 +467,49 @@ async def offer_email_preview(req: OfferEmailRequest,
         },
     )
     return {"html": html, "filename": filename, "history_id": history_id}
+
+
+class OfferEmailSendRequest(BaseModel):
+    to_email:  str = Field(min_length=3, max_length=160)
+    subject:   str = Field(min_length=1, max_length=240)
+    html:      str = Field(min_length=20)
+    reply_to:  str | None = Field(default=None, max_length=160)
+    name:      str | None = Field(default=None, max_length=120)
+    history_id: str | None = Field(default=None, max_length=80)
+
+
+@api_router.post("/offer-email/send")
+async def offer_email_send(req: OfferEmailSendRequest,
+                           _: dict = Depends(require_auth)):
+    """Deliver a fully-rendered offer-letter HTML email via SendGrid.
+
+    The frontend posts the (possibly edited) HTML from the preview modal —
+    we forward it as-is. On success we also annotate the history entry
+    with the message-id + recipient so the operator can audit later."""
+    if "@" not in req.to_email:
+        raise HTTPException(status_code=422, detail="Invalid recipient email.")
+    try:
+        message_id = send_html_email(
+            to_email=req.to_email,
+            subject=req.subject,
+            html_body=req.html,
+            reply_to=req.reply_to,
+        )
+    except EmailError as e:
+        # Surface SendGrid configuration / delivery issues with the actual
+        # reason so the operator can fix them (e.g. verified sender missing).
+        raise HTTPException(status_code=502, detail=str(e))
+
+    if req.history_id:
+        await db.history.update_one(
+            {"id": req.history_id},
+            {"$set": {
+                "sent_to":         req.to_email,
+                "sent_at":         datetime.now(timezone.utc),
+                "sendgrid_msg_id": message_id,
+            }},
+        )
+    return {"ok": True, "message_id": message_id}
 
 
 # ---------------------------------------------------------------------------
