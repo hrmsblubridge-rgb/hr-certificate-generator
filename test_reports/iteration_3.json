@@ -1,0 +1,73 @@
+{
+  "summary": "End-to-end testing of the new Offer Letter (Email) feature. Backend: 9/9 pytest cases passed (happy path 660k/1.5M/300k tier derivation, customized=400, no-auth=401, no-csrf=403, ctc=0->422, bad title->422, history list+download as text/html). Frontend: 11/12 Playwright checks passed — all 15 testids present, title/designation options correct, submit-disabled gating, modal opens with rendered HTML in iframe srcDoc (CHN/2025/Res/1-001, Six Lakh Sixty Thousand, Tier 2 all present), Open/Download/Close buttons exist, close preserves form values. Mobile 375px: form stacks correctly to a single column but the global app HEADER (logout-btn row) horizontally overflows by ~29px (404 > 375) — this is a pre-existing header issue, not introduced by the offer-email feature.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Global app header (visible on Offer Letter Email at 375x812)",
+        "issues": [
+          "The header's right-side cluster (div.flex.items-center.gap-2 containing logout-btn) extends from x=48 to x=404, causing a 29px horizontal scroll on 375px viewports. Root cause appears to be the header layout not collapsing/wrapping the nav-icons + logout button on narrow widths. The offer-email FORM itself stacks correctly into one column — overflow is purely header-driven."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_offer_email.py",
+    "/app/test_reports/pytest/offer_email_results.xml"
+  ],
+  "tests_executed": {
+    "backend_pytest_9_of_9_passed": [
+      "TestPreviewHappyPath::test_660k_full_render — html>50k chars, Ref/Date/Phone/<strong>15.03.2026</strong>/6,60,000/Six Lakh Sixty Thousand/Tier 2/ANNEXURE A..I all present; zero leftover [snake_case] placeholders",
+      "TestPreviewHappyPath::test_1_5m_tier1 — ctc=1,500,000 -> 'Tier 1' (fixed_total=1,200,000/12=100,000 monthly, hits Tier1 band)",
+      "TestPreviewHappyPath::test_300k_tier4 — ctc=300,000 -> 'Tier 4' (fixed_total=240,000/12=20,000 monthly)",
+      "TestValidationErrors::test_customized_mode_returns_400 — detail contains 'next iteration'",
+      "TestValidationErrors::test_no_auth_returns_401",
+      "TestValidationErrors::test_missing_csrf_returns_403",
+      "TestValidationErrors::test_ctc_zero_returns_422 (Pydantic gt=0)",
+      "TestValidationErrors::test_invalid_title_returns_422 (Literal[Mr.,Ms.,Mrs.,Dr.])",
+      "TestHistoryIntegration::test_history_lists_and_downloads — type=offer_email lists the entry, summary.ctc_yearly=660000, GET /history/{id}/download returns content-type=text/html (NOT application/pdf) and body contains 'ANNEXURE A'"
+    ],
+    "frontend_playwright_passed": [
+      "Login admin/pass123 -> menu visible",
+      "Click Offer Letter (Email) menu icon -> offer-email-form rendered",
+      "All 15 testids present: oe-title, oe-name, oe-email, oe-phone, oe-cur-date, oe-joining-date, oe-ref-suffix, oe-designation, oe-addr1/2/3, oe-mode-standard, oe-mode-customized, oe-ctc, oe-submit",
+      "oe-mode-standard checked by default; oe-mode-customized DISABLED",
+      "Title options: ['Select','Mr.','Ms.','Mrs.','Dr.'] — all 4 present",
+      "Designation options include 'Research Scientist'",
+      "oe-submit DISABLED on empty form; ENABLED after filling all 13 inputs",
+      "Click oe-submit -> oe-preview-modal opens with oe-preview-iframe whose srcDoc contains 'CHN/2025/Res/1-001', 'Six Lakh Sixty Thousand', 'Tier 2'",
+      "Modal has oe-preview-open, oe-preview-download, oe-preview-close buttons",
+      "Click oe-preview-close -> modal removed from DOM; oe-name still 'Aravind Krishna' and oe-ctc still '660000' (form state preserved)",
+      "Mobile 375x812: form column stacks vertically (visible in screenshot)"
+    ],
+    "frontend_playwright_failed": [
+      "Mobile 375x812 horizontal-scroll check: scrollWidth=404 > clientWidth=375. Root: HEADER logout-btn row (div.flex.items-center.gap-2 right=404). NOT caused by offer-email form."
+    ]
+  },
+  "action_items": [
+    "OPTIONAL/PRE-EXISTING: Fix global header horizontal overflow at <400px viewports. The nav-icons + logout-btn row needs flex-wrap, smaller padding, or a hamburger collapse below the sm breakpoint. Not blocking the offer-email feature ship."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~675 lines (>700-line guideline approaching). Adding the new offer-email endpoint keeps mixing offer-letter PDF + ack + certificate + offer-email + history + SPA-mount in one file. Strongly consider splitting into routers/auth.py, routers/certificate.py, routers/offer.py, routers/offer_email.py, routers/history.py.",
+    "_save_history stores the rendered HTML inside the 'pdf' BSON Binary field — works (Binary doesn't care about content-type) but the field name is now a misnomer. Rename to 'blob' or 'content' in a future migration; downstream code already infers media-type from filename suffix, so the read path is OK.",
+    "OfferEmailRequest does not validate that `date` and `cur_date` look like DD.MM.YYYY — a malformed string would still substitute into the HTML. Consider a regex Field(pattern=r'^\\d{2}\\.\\d{2}\\.\\d{4}$') to catch user-input or future client mistakes.",
+    "offer_letter_email.py PLACEHOLDERS list contains 'ruppe' and 'inr_ruppe_text' (typo of 'rupee') — these match the template source so it's correct as-is, but worth a comment noting the template's typo so a future template re-export doesn't accidentally fix the typo and break substitution.",
+    "PreviewModal in OfferLetterEmailView.js: `URL.createObjectURL` in the 'open in new tab' path is intentionally never revoked (per the inline comment). Acceptable trade-off; consider revoking after a delay (~60s) to bound memory.",
+    "Frontend form mode='customized' is disabled in UI AND blocked at backend with 400. Good defense in depth.",
+    "The form's md:grid-cols-2 split puts ALL left-column fields (title..addr3 = 11 fields) on the left and only mode+CTC+submit on the right, leaving lots of empty whitespace on desktop. Visual UX could be improved by interleaving."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_offer_email.py (new — 9 pytest cases covering happy path, tier derivation, validation, auth/csrf guards, history persistence + download content-type)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "92% (11/12 checks)"},
+  "test_credentials": "admin / pass123 (verified via /api/auth/login -> 200). /app/memory/test_credentials.md still shows pass1234 in some legacy callsites but pass123 is the live DB password.",
+  "seed_data_creation": "5 offer_email history entries created during backend tests (names prefixed 'TEST'), plus 1 created from the frontend Playwright submit ('Aravind Krishna'). All can be filtered/deleted via /api/history?type=offer_email.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin password = pass123. The Offer Letter (Email) menu label is hidden on mobile (hidden sm:inline); navigate via the Mail icon button or use page.evaluate to click the span. Header overflows by ~29px at 375px viewport — this is GLOBAL, not specific to offer-email; report under design but don't block. Offer-email history entries are stored with filename ending '.html' and the /history/{id}/download endpoint correctly infers text/html (verified in test_offer_email.py::TestHistoryIntegration). Tier derivation uses MONTHLY fixed-comp bands: Tier0 >=100,001; Tier1 75,001-100,000; Tier2 40,001-75,000; Tier3 25,001-40,000; Tier4 15,001-25,000; Tier5 10,000-15,000."
+}

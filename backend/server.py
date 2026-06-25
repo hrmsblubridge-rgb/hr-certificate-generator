@@ -345,6 +345,7 @@ async def generate_certificate(req: CertificateRequest, _: dict = Depends(requir
 # ---------------------------------------------------------------------------
 from offer_letter import build_offer_letter
 from acknowledgement import build_acknowledgement
+from offer_letter_email import render_offer_letter  # noqa: E402
 
 
 class OfferRequest(BaseModel):
@@ -410,6 +411,64 @@ async def generate_ack(req: AckRequest, _: dict = Depends(require_auth)):
 
 
 # ---------------------------------------------------------------------------
+# Offer Letter (Email) — multi-page HTML generator
+# ---------------------------------------------------------------------------
+# Produces a fully self-contained HTML offer letter (with embedded CSS) that
+# can be previewed in an iframe today and sent via email in the next
+# iteration. Only `standard` mode is wired in v1; the `mode` field is kept on
+# the request so the FE can stay forward-compatible.
+
+class OfferEmailRequest(BaseModel):
+    title:            Literal["Mr.", "Ms.", "Mrs.", "Dr."]
+    name:             str = Field(min_length=1, max_length=120)
+    email:            str = Field(min_length=3, max_length=160)
+    phone:            str = Field(min_length=1, max_length=40)
+    date:             str = Field(min_length=1, max_length=40)   # joining date
+    cur_date:         str = Field(min_length=1, max_length=40)   # letter date
+    reference_number: str = Field(min_length=1, max_length=60)
+    designation:      str = Field(min_length=1, max_length=120)
+    address_line1:    str = Field(min_length=1, max_length=200)
+    address_line2:    str = Field(default="",   max_length=200)
+    address_line3:    str = Field(default="",   max_length=200)
+    mode:             Literal["standard", "customized"] = "standard"
+    ctc_yearly:       int = Field(gt=0, le=100_000_000)
+
+
+@api_router.post("/offer-email/preview")
+async def offer_email_preview(req: OfferEmailRequest,
+                              _: dict = Depends(require_auth)):
+    """Render the HTML offer letter for in-browser preview. Also persists the
+    rendered HTML in history so the operator can revisit / re-send later."""
+    if req.mode == "customized":
+        raise HTTPException(
+            status_code=400,
+            detail="Customized mode will ship in the next iteration. "
+                   "Use Standard mode for now.",
+        )
+    payload = req.model_dump()
+    for k in ("name", "phone", "email", "designation", "reference_number",
+              "address_line1", "address_line2", "address_line3"):
+        payload[k] = sanitize_text(payload[k], field=k)
+    try:
+        html = render_offer_letter(payload)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Persist for history (stored as bytes; filename matches the candidate).
+    safe_name = "".join(c for c in req.name if c.isalnum() or c in " _-").strip() or "Offer"
+    filename = f"Offer_Letter_Email_{safe_name.replace(' ', '_')}.html"
+    history_id = await _save_history(
+        "offer_email", req.name, filename, html.encode("utf-8"),
+        summary={
+            "designation":      req.designation,
+            "reference_number": req.reference_number,
+            "ctc_yearly":       req.ctc_yearly,
+            "joining_date":     req.date,
+        },
+    )
+    return {"html": html, "filename": filename, "history_id": history_id}
+
+
+# ---------------------------------------------------------------------------
 # Document generation history
 # ---------------------------------------------------------------------------
 # Each successful PDF generation is persisted in MongoDB so HR can later list
@@ -452,15 +511,18 @@ async def list_history(type: str | None = None, q: str | None = None, limit: int
 
 @api_router.get("/history/{entry_id}/download")
 async def download_history(entry_id: str, _: dict = Depends(require_auth)):
-    """Re-download a previously-generated PDF."""
+    """Re-download a previously-generated document. Content-type is inferred
+    from the stored filename so PDF documents stream as application/pdf and
+    HTML offer-letter emails stream as text/html."""
     entry = await db.history.find_one({"id": entry_id}, {"_id": 0})
     if not entry:
         return StreamingResponse(io.BytesIO(b""), status_code=404)
-    pdf_bytes = bytes(entry["pdf"])
+    blob = bytes(entry["pdf"])  # historical column name; may also hold HTML
     filename = entry.get("filename", f"document_{entry_id[:8]}.pdf")
+    media_type = "text/html" if filename.lower().endswith(".html") else "application/pdf"
     return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
+        io.BytesIO(blob),
+        media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
