@@ -221,6 +221,12 @@ STATIC_BODY_REDACT = fitz.Rect(42.06, 258.0, 561.0, 335.0)
 # Original baselines: line-3 y=269, line-4 y=322 (from get_text on source PDF).
 STATIC_PARA2_RECT  = fitz.Rect(42.06, 255.27, 561.0, 320.0)   # 2 visual lines
 STATIC_PARA3_RECT  = fitz.Rect(42.06, 308.27, 561.0, 360.0)   # 1 visual line
+# Note: para2.y1 (320) overlaps para3.y0 (308.27) by ~12pt in the rect
+# bounding boxes, but the actual painted text glyphs land in non-overlapping
+# vertical bands (para2 ends visually at y≈298, para3 starts at y≈322).
+# Shrinking para2.y1 below 320 causes insert_htmlbox to drop the 2nd visual
+# line ("initiatives.") because it conservatively reserves a full line-height
+# of trailing padding.
 STATIC_PARA2_FEMALE = (
     "During her internship, she demonstrated professionalism, enthusiasm, "
     "and valuable contributions to our research initiatives."
