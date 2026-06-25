@@ -205,6 +205,35 @@ EMBEDDED_CSS = """<style>
          color: #000; margin: 0; padding: 0; line-height: 1.55; }
   .page { max-width: 600px; margin: 0 auto; padding: 30px 36px 48px;
           background: #fff; page-break-after: always; }
+  /* Body copy is justified — headings, address, tables and signature
+     blocks intentionally stay left/center aligned (overrides below). */
+  .page p,
+  .page ol.list li,
+  .page ol.alpha-list li,
+  .page ol.roman li,
+  .page .declaration-text,
+  .page .insurance p,
+  .page .item, .page .indent, .page .indent2 {
+    text-align: justify;
+    text-justify: inter-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    -ms-hyphens: auto;
+  }
+  /* Keep tight blocks aligned as in the source template. */
+  .page .address,
+  .page .address p,
+  .page .info-table td,
+  .page .footer-sign td,
+  .page .sign-table td,
+  .page .encl,
+  .page .small,
+  .page .small-note,
+  .page .table-title,
+  .page h2, .page h3, .page h4 { text-align: inherit; }
+  .page .address, .page .address p { text-align: left; }
+  .page h2.title, .page h3.sub-title, .page h3.subtitle,
+  .page .table-title { text-align: center; }
   .page + .page { border-top: 1px dashed #ccc; }
   table.top-row { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
   table.top-row td { padding: 4px 0; vertical-align: middle; }
