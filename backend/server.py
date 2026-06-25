@@ -498,7 +498,10 @@ async def offer_email_send(req: OfferEmailSendRequest,
     except EmailError as e:
         # Surface SendGrid configuration / delivery issues with the actual
         # reason so the operator can fix them (e.g. verified sender missing).
-        raise HTTPException(status_code=502, detail=str(e))
+        # Use 400 (not 502): Cloudflare and many reverse proxies intercept
+        # 5xx responses from the origin and replace the body with their own
+        # generic error page, which would hide our detail.
+        raise HTTPException(status_code=400, detail=str(e))
 
     if req.history_id:
         await db.history.update_one(
