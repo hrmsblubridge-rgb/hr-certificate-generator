@@ -3,10 +3,12 @@ import { Loader2, FileText, Download, ExternalLink, X } from "lucide-react";
 import { apiJSON } from "@/lib/api";
 
 // ---- shared field components --------------------------------------------
-function Field({ label, children, testid }) {
+function Field({ label, required, children, testid }) {
   return (
     <label className="block mb-4" data-testid={testid ? `${testid}-wrap` : undefined}>
-      <span className="block text-sm font-semibold text-[#1a1a1f] mb-1.5">{label}</span>
+      <span className="block text-sm font-semibold text-[#1a1a1f] mb-1.5">
+        {label}{required && <span className="text-red-600 ml-0.5" aria-label="required">*</span>}
+      </span>
       {children}
     </label>
   );
@@ -205,7 +207,7 @@ export default function OfferLetterEmailView() {
       >
         {/* LEFT column */}
         <div>
-          <Field label="Title">
+          <Field label="Title" required>
             <select
               data-testid="oe-title"
               value={form.title}
@@ -218,7 +220,7 @@ export default function OfferLetterEmailView() {
             </select>
           </Field>
 
-          <Field label="Name">
+          <Field label="Name" required>
             <input
               data-testid="oe-name"
               type="text"
@@ -228,7 +230,7 @@ export default function OfferLetterEmailView() {
             />
           </Field>
 
-          <Field label="Email ID">
+          <Field label="Email ID" required>
             <input
               data-testid="oe-email"
               type="email"
@@ -238,7 +240,7 @@ export default function OfferLetterEmailView() {
             />
           </Field>
 
-          <Field label="Phone">
+          <Field label="Phone" required>
             <input
               data-testid="oe-phone"
               type="tel"
@@ -248,7 +250,7 @@ export default function OfferLetterEmailView() {
             />
           </Field>
 
-          <Field label="Date (Letter)">
+          <Field label="Date (Letter)" required>
             <input
               data-testid="oe-cur-date"
               type="date"
@@ -258,7 +260,7 @@ export default function OfferLetterEmailView() {
             />
           </Field>
 
-          <Field label="Joining Date">
+          <Field label="Joining Date" required>
             <input
               data-testid="oe-joining-date"
               type="date"
@@ -268,7 +270,7 @@ export default function OfferLetterEmailView() {
             />
           </Field>
 
-          <Field label="Reference Number">
+          <Field label="Reference Number" required>
             <div className="flex items-center gap-2">
               <span className="text-sm text-[#1a1a1f]/65 bg-[#f6f4ef] border border-[#1a1a1f]/15 rounded-md px-3 py-2.5 select-none">
                 {REF_PREFIX}
@@ -284,7 +286,7 @@ export default function OfferLetterEmailView() {
             </div>
           </Field>
 
-          <Field label="Designation">
+          <Field label="Designation" required>
             <select
               data-testid="oe-designation"
               value={form.designation}
@@ -297,7 +299,7 @@ export default function OfferLetterEmailView() {
             </select>
           </Field>
 
-          <Field label="Address Line 1">
+          <Field label="Address Line 1" required>
             <input
               data-testid="oe-addr1"
               type="text"
@@ -362,7 +364,7 @@ export default function OfferLetterEmailView() {
             </label>
           </div>
 
-          <Field label="CTC (Yearly)">
+          <Field label="CTC (Yearly)" required>
             <input
               data-testid="oe-ctc"
               type="number"
@@ -387,6 +389,15 @@ export default function OfferLetterEmailView() {
               className="mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2"
             >
               {error}
+            </div>
+          )}
+
+          {!allFilled && !error && (
+            <div
+              data-testid="oe-missing-hint"
+              className="mb-3 text-xs text-[#1a1a1f]/65 bg-[#fff8e6] border border-amber-200 rounded-md px-3 py-2"
+            >
+              Fill all required fields (marked <span className="text-red-600 font-semibold">*</span>) to enable preview.
             </div>
           )}
 
