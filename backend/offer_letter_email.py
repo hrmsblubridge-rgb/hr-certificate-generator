@@ -203,7 +203,7 @@ def build_annexure_a_table(comp: dict) -> str:
 EMBEDDED_CSS = """<style>
   body { font-family: Arial, Helvetica, sans-serif; font-size: 12px;
          color: #000; margin: 0; padding: 0; line-height: 1.55; }
-  .page { max-width: 800px; margin: 0 auto; padding: 36px 48px 60px;
+  .page { max-width: 600px; margin: 0 auto; padding: 30px 36px 48px;
           background: #fff; page-break-after: always; }
   .page + .page { border-top: 1px dashed #ccc; }
   table.top-row { width: 100%; border-collapse: collapse; margin-bottom: 12px; }

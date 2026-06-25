@@ -90,7 +90,6 @@ function PreviewModal({ html, filename, onClose }) {
 }
 
 // ---- main view ----------------------------------------------------------
-const REF_PREFIX = "CHN/2025/Res/1-";
 const TITLES = ["Mr.", "Ms.", "Mrs.", "Dr."];
 const DESIGNATIONS = [
   "Research Scientist",
@@ -122,7 +121,7 @@ export default function OfferLetterEmailView() {
     phone: "",
     cur_date_iso: isoDateToday(),
     date_iso: "",
-    ref_suffix: "",
+    reference_number: "CHN/2025/Res/1-",
     designation: "",
     address_line1: "",
     address_line2: "",
@@ -146,7 +145,7 @@ export default function OfferLetterEmailView() {
     form.phone.trim() &&
     form.cur_date_iso &&
     form.date_iso &&
-    form.ref_suffix.trim() &&
+    form.reference_number.trim() &&
     form.designation &&
     form.address_line1.trim() &&
     (form.mode !== "standard" || (form.ctc_yearly && Number(form.ctc_yearly) > 0));
@@ -172,7 +171,7 @@ export default function OfferLetterEmailView() {
         phone:            form.phone.trim(),
         cur_date:         isoToDotted(form.cur_date_iso),
         date:             isoToDotted(form.date_iso),
-        reference_number: `${REF_PREFIX}${form.ref_suffix.trim()}`,
+        reference_number: form.reference_number.trim(),
         designation:      form.designation,
         address_line1:    form.address_line1.trim(),
         address_line2:    form.address_line2.trim(),
@@ -271,19 +270,14 @@ export default function OfferLetterEmailView() {
           </Field>
 
           <Field label="Reference Number" required>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-[#1a1a1f]/65 bg-[#f6f4ef] border border-[#1a1a1f]/15 rounded-md px-3 py-2.5 select-none">
-                {REF_PREFIX}
-              </span>
-              <input
-                data-testid="oe-ref-suffix"
-                type="text"
-                value={form.ref_suffix}
-                onChange={set("ref_suffix")}
-                placeholder="001"
-                className={inputCls}
-              />
-            </div>
+            <input
+              data-testid="oe-ref-number"
+              type="text"
+              value={form.reference_number}
+              onChange={set("reference_number")}
+              placeholder="CHN/2025/Res/1-001"
+              className={inputCls}
+            />
           </Field>
 
           <Field label="Designation" required>
