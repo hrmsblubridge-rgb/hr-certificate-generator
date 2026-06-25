@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Loader2, FileText, Download, ExternalLink, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Loader2, FileText, Download, ExternalLink, X, Pencil, Check } from "lucide-react";
 import { apiJSON } from "@/lib/api";
 
 // ---- shared field components --------------------------------------------
@@ -24,7 +24,49 @@ const selectArrowStyle = {
 };
 
 // ---- preview modal ------------------------------------------------------
-function PreviewModal({ html, filename, onClose }) {
+function PreviewModal({ html: initialHtml, filename, onClose }) {
+  // HTML can be MUTATED via the inline edit-content feature, so we hold it
+  // in state. Download / Open / Re-render all read the latest value.
+  const [html, setHtml] = useState(initialHtml);
+  const [editing, setEditing] = useState(false);
+  const iframeRef = useRef(null);
+
+  // Toggle the iframe body's contenteditable when entering / leaving edit
+  // mode. Reads back the edited document on Save so subsequent actions use
+  // the modified HTML.
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const apply = () => {
+      const doc = iframe.contentDocument;
+      if (!doc || !doc.body) return;
+      doc.body.contentEditable = editing ? "true" : "false";
+      doc.body.style.outline = editing ? "2px dashed #232369" : "";
+      doc.body.style.outlineOffset = editing ? "-2px" : "";
+      doc.body.style.cursor = editing ? "text" : "";
+      if (editing) doc.body.focus();
+    };
+    if (iframe.contentDocument?.readyState === "complete") apply();
+    else iframe.addEventListener("load", apply, { once: true });
+    return () => iframe.removeEventListener("load", apply);
+  }, [editing, html]);
+
+  const onToggleEdit = () => {
+    if (editing) {
+      // Saving — capture the edited HTML out of the iframe and strip the
+      // visual edit affordance so it doesn't bleed into the downloaded copy.
+      const doc = iframeRef.current?.contentDocument;
+      if (doc?.documentElement) {
+        doc.body.style.outline = "";
+        doc.body.style.outlineOffset = "";
+        doc.body.style.cursor = "";
+        doc.body.contentEditable = "false";
+        setHtml("<!DOCTYPE html>" + doc.documentElement.outerHTML);
+      }
+    }
+    setEditing((v) => !v);
+  };
+
   const open = () => {
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
@@ -47,23 +89,48 @@ function PreviewModal({ html, filename, onClose }) {
       className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm grid place-items-center p-3 sm:p-6"
     >
       <div className="w-full max-w-5xl h-[88vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1f]/10 bg-[#f6f4ef]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#1a1a1f]/10 bg-[#f6f4ef] gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-sm font-semibold text-[#1a1a1f]">
             <FileText size={16} className="text-[#232369]" />
             Offer Letter preview
+            {editing && (
+              <span
+                data-testid="oe-edit-indicator"
+                className="ml-2 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#232369]/10 text-[#232369]"
+              >
+                editing
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              data-testid="oe-preview-edit"
+              onClick={onToggleEdit}
+              title={editing ? "Save edits" : "Click to edit content"}
+              className={
+                "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors " +
+                (editing
+                  ? "bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700"
+                  : "border-[#1a1a1f]/15 hover:bg-white text-[#1a1a1f]")
+              }
+            >
+              {editing
+                ? (<><Check size={13} /> Save</>)
+                : (<><Pencil size={13} /> Edit content</>)}
+            </button>
             <button
               data-testid="oe-preview-open"
               onClick={open}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-[#1a1a1f]/15 hover:bg-white"
+              disabled={editing}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-[#1a1a1f]/15 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <ExternalLink size={13} /> Open in new tab
             </button>
             <button
               data-testid="oe-preview-download"
               onClick={download}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-[#232369] text-white hover:bg-[#1a1a55]"
+              disabled={editing}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-[#232369] text-white hover:bg-[#1a1a55] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Download size={13} /> Download HTML
             </button>
@@ -78,12 +145,21 @@ function PreviewModal({ html, filename, onClose }) {
           </div>
         </div>
         <iframe
+          ref={iframeRef}
           data-testid="oe-preview-iframe"
           title="Offer Letter Preview"
           srcDoc={html}
           className="flex-1 w-full border-0 bg-white"
           sandbox="allow-same-origin"
         />
+        {editing && (
+          <div
+            data-testid="oe-edit-help"
+            className="px-5 py-2 text-[11px] text-[#1a1a1f]/70 bg-[#fff8e6] border-t border-amber-200"
+          >
+            Click anywhere in the preview to edit. Press <strong>Save</strong> when done &mdash; Download and Open in new tab will then use your edited copy.
+          </div>
+        )}
       </div>
     </div>
   );
