@@ -36,7 +36,7 @@ export default function Login({ onSuccess }) {
       <div className="flex-1 w-full flex flex-col items-center justify-center">
         <div className="mb-10 select-none">
           <img src="/img/blubridge-logo.webp" alt="BluBridge"
-               className="h-14 w-auto" draggable={false} />
+               className="w-auto" draggable={false} />
         </div>
 
         <form onSubmit={onSubmit} data-testid="login-form" autoComplete="off"

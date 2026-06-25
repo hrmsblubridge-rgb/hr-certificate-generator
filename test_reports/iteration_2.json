@@ -1,0 +1,53 @@
+{
+  "summary": "End-to-end testing of the Gender feature on the Internship Certificate flow. 6/6 backend pytest cases passed (validation 422s, male PDF with preserved 'him future' typo, female PDF pronouns, female static-line baselines at y=269/289/322 within ±1pt, history.summary.gender persistence). All 7 frontend Playwright checks passed (dropdown placement, options list, button-disabled gating, live preview pronoun swap for male & female, PDF download, mobile 375px responsive layout with no horizontal scroll).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_certificate_gender.py",
+    "/app/test_reports/pytest/cert_gender_results.xml"
+  ],
+  "tests_executed": {
+    "backend_pytest_6_of_6_passed": [
+      "TestValidation::test_missing_gender_returns_422",
+      "TestValidation::test_invalid_gender_other_returns_422 (Literal[male,female])",
+      "TestMalePDF::test_male_generates_valid_pdf_with_his_pronouns (verifies 'has completed his internship', 'His internship tenure', 'During his internship, he demonstrated', AND the intentional 'We wish him all the best in him future endeavors.' typo preserved)",
+      "TestFemalePDF::test_female_pronouns_present (her/her/she/her variants)",
+      "TestFemalePDF::test_female_baselines_match_original (bbox.y0 of line3=269.0, initiatives.=289.0, line4=322.0 — perfect alignment within ±0.04 of the original Aravind_Krishna_Original.pdf bbox tops)",
+      "TestHistory::test_history_contains_gender (GET /api/history returns summary.gender='male' and 'female' for the two test entries)"
+    ],
+    "frontend_playwright_passed": [
+      "Login admin/pass123 succeeds",
+      "data-testid='cert-input-gender' rendered between Designation and Commenced/Concluded grid",
+      "Options: [{val:'', text:'Select gender', disabled:true}, {val:'male', text:'Male'}, {val:'female', text:'Female'}]",
+      "cert-generate-btn disabled when form empty AND when all fields filled except gender",
+      "Selecting Male updates cert-live-preview live: 'has completed his internship', 'His internship tenure', 'During his internship, he demonstrated', 'We wish him all the best in him future endeavors.'",
+      "Switching to Female instantly updates cert-live-preview (no submit, no reload) to: 'has completed her internship', 'Her internship tenure', 'During her internship, she demonstrated', 'We wish her all the best in her future endeavors.'",
+      "Clicking Generate with gender=female triggers PDF download 'Internship_Certificate_Mr_Test_User.pdf' with zero console/page errors",
+      "Mobile viewport 375x812: scrollWidth==clientWidth==375 (no horizontal scroll), gender dropdown stacks vertically with the other fields and remains functional"
+    ]
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "test_credentials.md in /app/memory says admin password is 'pass1234' (left over from iteration_1 tests) but the live DB password is actually 'pass123' (the bootstrap-env default). The memory file should be updated to 'pass123' or the chpw side-effect from iteration_1 should be re-applied — currently the docs and reality drift apart.",
+    "server.py is now ~592 lines and continues to mix auth, certificate gen, offer letter, acknowledgement, history, SPA-mount, and middleware in one file. Splitting per >700-line guideline is becoming more urgent as new doc types are added.",
+    "STATIC_PARA2_RECT bottom is 320.0 which overlaps the STATIC_PARA3_RECT top at 308.27 — works today because each htmlbox is rendered standalone and PyMuPDF doesn't enforce ordering, but the overlap is fragile. Consider non-overlapping rects (e.g. STATIC_PARA2_RECT.y1=305).",
+    "Female pronoun handling re-uses PARA_REDACT_RECT + STATIC_BODY_REDACT in two separate add_redact_annot calls before a single apply_redactions — confirmed correct in code and verified by pixel-perfect baselines.",
+    "history collection stores the full PDF as BSON Binary inside each entry; this is fine for low-volume HR usage but the document size will balloon (~150KB/cert). Consider GridFS or external blob storage if >10k certs/year are expected."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_certificate_gender.py (new — 6 pytest cases, fixed bbox-top vs origin distinction during authoring)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (8/8 checks)"},
+  "test_credentials": "admin / pass123 (verified via /api/auth/login -> 200). Note: /app/memory/test_credentials.md still says pass1234 from iteration_1 — DB pw is actually pass123.",
+  "seed_data_creation": "3 history entries created during tests: TEST_HistoryUser_male, TEST_HistoryUser_female, TEST_MaleUser, TEST_FemaleUser certificates. Mobile-flow test certificate 'Mr. Test User' also created. All harmless; can be left in db.history or filtered by name prefix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin pw = pass123 (NOT pass1234 — memory file is stale). Login flow requires X-CSRF-Token header from login response on every subsequent state-changing call (handled automatically by requests.Session in test_certificate_gender.py). For PDF assertions: spec's 'y=269/289/322' refers to line bbox.y0 (top), NOT span.origin.y (baseline ~10.6pt below top). Female PDF achieves exact bbox-top alignment (Δ<0.05pt vs original); male PDF leaves the static lines 3-4 untouched per design. The 'him future' typo in male line 4 is intentional source-PDF content."
+}

@@ -20,8 +20,37 @@ function Field({ label, placeholder, value, onChange, testid }) {
   );
 }
 
+function SelectField({ label, value, onChange, testid, children }) {
+  return (
+    <label className="block mb-4">
+      <span className="block text-xs font-medium text-[#1a1a1f]/70 mb-1.5">
+        {label}
+      </span>
+      <select
+        data-testid={testid}
+        value={value}
+        onChange={onChange}
+        className="w-full bg-[#f6f4ef] border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2.5 text-sm text-[#1a1a1f] transition-colors appearance-none bg-no-repeat bg-[right_0.75rem_center] pr-9"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml;charset=US-ASCII,%3Csvg width='12' height='8' viewBox='0 0 12 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%231a1a1f' stroke-opacity='0.55' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+        }}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+// Pronoun map driving the live preview (mirrors the backend logic).
+const PRONOUNS = {
+  male:   { his: "his", His: "His", he: "he", him: "him" },
+  female: { his: "her", His: "Her", he: "she", him: "her" },
+};
+
 function Preview({ values }) {
   const show = (v, fallback) => (v && v.trim() ? v : fallback);
+  const p = PRONOUNS[values.gender] || PRONOUNS.male;
   return (
     <div
       data-testid="cert-live-preview"
@@ -33,19 +62,19 @@ function Preview({ values }) {
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f]">
         This is to certify that{" "}
         <span className="font-bold">{show(values.name, "____________________")}</span>{" "}
-        has completed his internship as an{" "}
+        has completed {p.his} internship as an{" "}
         <span className="font-bold">{show(values.designation, "____________________")}</span>{" "}
-        with Blubridge Technologies Pvt Ltd. His internship tenure commenced on{" "}
+        with Blubridge Technologies Pvt Ltd. {p.His} internship tenure commenced on{" "}
         <span className="font-bold">{show(values.commenced, "__________")}</span>{" "}
         and concluded on{" "}
         <span className="font-bold">{show(values.concluded, "__________")}</span>.
       </p>
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f] mt-4">
-        During his internship, he demonstrated professionalism, enthusiasm, and
+        During {p.his} internship, {p.he} demonstrated professionalism, enthusiasm, and
         valuable contributions to our research initiatives.
       </p>
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f] mt-4">
-        We wish him all the best in him future endeavors.
+        We wish {p.him} all the best in {p.him} future endeavors.
       </p>
       <p className="text-[11px] text-[#1a1a1f]/45 mt-6">
         Mock preview only &mdash; header, footer, logo, signature appear in the
@@ -61,6 +90,7 @@ export default function CertificateView() {
     designation: "",
     commenced: "",
     concluded: "",
+    gender: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -70,11 +100,17 @@ export default function CertificateView() {
     form.name.trim() &&
     form.designation.trim() &&
     form.commenced.trim() &&
-    form.concluded.trim();
+    form.concluded.trim() &&
+    form.gender;
 
   const onGenerate = async (e) => {
     e.preventDefault();
-    if (!allFilled || busy) return;
+    if (busy) return;
+    if (!form.gender) {
+      setError("Please select gender");
+      return;
+    }
+    if (!allFilled) return;
     setBusy(true);
     setError("");
     try {
@@ -108,7 +144,7 @@ export default function CertificateView() {
           Enter details
         </div>
         <h2 className="text-lg font-semibold mt-1 mb-5">
-          Fill the four fields, download the PDF.
+          Fill the fields, download the PDF.
         </h2>
 
         <Field
@@ -125,6 +161,19 @@ export default function CertificateView() {
           value={form.designation}
           onChange={set("designation")}
         />
+        <SelectField
+          label="Gender"
+          testid="cert-input-gender"
+          value={form.gender}
+          onChange={(e) => {
+            setForm({ ...form, gender: e.target.value });
+            if (error === "Please select gender") setError("");
+          }}
+        >
+          <option value="" disabled>Select gender</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </SelectField>
         <div className="grid grid-cols-2 gap-3">
           <Field
             label="Commenced on Date"
@@ -183,7 +232,7 @@ export default function CertificateView() {
               "Signature block (Praveen Kumar S, Director)",
               "Company address, CIN, phone, email",
               "Font, size, weight, alignment, spacing, margins",
-              "All surrounding wording \u2014 not a single word changed",
+              "All surrounding wording \u2014 only pronouns change with gender",
             ].map((t) => (
               <li key={t} className="flex items-start gap-2">
                 <CheckCircle2 size={14} className="mt-0.5 text-[#232369]" />

@@ -9,7 +9,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Literal
 import uuid
 from datetime import datetime, timezone
 import pymupdf as fitz
@@ -205,10 +205,31 @@ class CertificateRequest(BaseModel):
     designation: str = Field(min_length=1, max_length=120)
     commenced: str = Field(min_length=1, max_length=40)
     concluded: str = Field(min_length=1, max_length=40)
+    gender: Literal["male", "female"]
+
+
+# ---- Static body lines that depend on gender ---------------------------------
+# Lines 3-4 of the original PDF body — these stay verbatim for `male` (the
+# original PDF already reads "During his ... he ... him ... him"), but when
+# `gender == "female"` we redact those two lines and re-render them with
+# `her / she / her / her` substituted. The y-coordinates were derived from
+# `page.get_text()` against the source PDF — baselines at y=273 (para 2,
+# first visual line), y=293 (para 2, wrapped), and y=326 (para 3).
+STATIC_BODY_REDACT = fitz.Rect(42.06, 258.0, 561.0, 335.0)
+# Draw rect tops are positioned 13.73pt above the desired first-baseline
+# (same offset proven by PARA_DRAW_RECT, where top=198.43 → baseline=212.16).
+# Original baselines: line-3 y=269, line-4 y=322 (from get_text on source PDF).
+STATIC_PARA2_RECT  = fitz.Rect(42.06, 255.27, 561.0, 320.0)   # 2 visual lines
+STATIC_PARA3_RECT  = fitz.Rect(42.06, 308.27, 561.0, 360.0)   # 1 visual line
+STATIC_PARA2_FEMALE = (
+    "During her internship, she demonstrated professionalism, enthusiasm, "
+    "and valuable contributions to our research initiatives."
+)
+STATIC_PARA3_FEMALE = "We wish her all the best in her future endeavors."
 
 
 def _build_filled_pdf(values: dict) -> bytes:
-    """Bake the four user-supplied values directly into the source PDF.
+    """Bake the user-supplied values directly into the source PDF.
 
     Strategy: redact the ENTIRE two-line body paragraph, then re-render it from
     scratch using a Story-based HTML box with the two embedded Roboto weights.
@@ -218,25 +239,30 @@ def _build_filled_pdf(values: dict) -> bytes:
       * Inline mixed bold/regular weight — exactly mirroring the original.
       * Same font (Roboto), size (10pt), color (#232369), line spacing (20pt),
         first-line baseline (y=212.16), and right margin.
+
+    Gender handling:
+      * `male`   — pronouns in the rebuilt top paragraph use "his"/"His"; the
+        static lines 3-4 of the original PDF are NOT touched (zero pixel-level
+        risk; output is byte-equivalent in layout to the pre-feature build).
+      * `female` — pronouns in the rebuilt top paragraph use "her"/"Her"; the
+        static lines 3-4 are also redacted and re-rendered with feminine
+        pronouns at their original baselines.
     """
     import html as _html
+    gender      = (values.get("gender") or "male").strip().lower()
+    pronoun_lo  = "her" if gender == "female" else "his"
+    pronoun_up  = "Her" if gender == "female" else "His"
+
     doc = fitz.open(str(ORIGINAL_PDF))
     page = doc[0]
 
-    # 1) Redact the original body paragraph (covers both lines, nothing else).
+    # 1) Queue redactions in a single batch (one apply_redactions call).
     page.add_redact_annot(PARA_REDACT_RECT, fill=(1, 1, 1))
+    if gender == "female":
+        page.add_redact_annot(STATIC_BODY_REDACT, fill=(1, 1, 1))
     page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
 
-    # 2) Rebuild the paragraph with the user-supplied values.
-    e = _html.escape
-    body_html = (
-        f'<p>This is to certify that <b>{e(values["name"].strip())}</b> '
-        f'has completed his internship as an '
-        f'<b>{e(values["designation"].strip())}</b> with Blubridge '
-        f'Technologies Pvt Ltd. His internship tenure commenced on '
-        f'<b>{e(values["commenced"].strip())}</b> and concluded on '
-        f'<b>{e(values["concluded"].strip())}</b>.</p>'
-    )
+    # 2) Shared CSS + font archive used by every htmlbox below.
     css = (
         "@font-face { font-family:'R'; src:url(roboto-regular); }"
         "@font-face { font-family:'R'; font-weight:bold; src:url(roboto-bold); }"
@@ -247,8 +273,26 @@ def _build_filled_pdf(values: dict) -> bytes:
     arch.add(str(ROBOTO_REGULAR_PATH), "roboto-regular")
     arch.add(str(ROBOTO_BOLD_PATH),    "roboto-bold")
 
+    # 3) Rebuild the dynamic top paragraph (lines 1-2).
+    e = _html.escape
+    body_html = (
+        f'<p>This is to certify that <b>{e(values["name"].strip())}</b> '
+        f'has completed {pronoun_lo} internship as an '
+        f'<b>{e(values["designation"].strip())}</b> with Blubridge '
+        f'Technologies Pvt Ltd. {pronoun_up} internship tenure commenced on '
+        f'<b>{e(values["commenced"].strip())}</b> and concluded on '
+        f'<b>{e(values["concluded"].strip())}</b>.</p>'
+    )
     # scale_low=1 disables auto-shrink so the font stays at 10pt.
     page.insert_htmlbox(PARA_DRAW_RECT, body_html, css=css, archive=arch, scale_low=1)
+
+    # 4) Female-only: re-render static lines 3-4 with feminine pronouns
+    #    at the same baselines as the original.
+    if gender == "female":
+        page.insert_htmlbox(STATIC_PARA2_RECT, f"<p>{STATIC_PARA2_FEMALE}</p>",
+                            css=css, archive=arch, scale_low=1)
+        page.insert_htmlbox(STATIC_PARA3_RECT, f"<p>{STATIC_PARA3_FEMALE}</p>",
+                            css=css, archive=arch, scale_low=1)
 
     buf = io.BytesIO()
     doc.save(buf, garbage=4, deflate=True, clean=True)
@@ -266,8 +310,9 @@ async def generate_certificate(req: CertificateRequest, _: dict = Depends(requir
     filename = f"Internship_Certificate_{safe_name.replace(' ', '_')}.pdf"
     await _save_history("certificate", req.name, filename, pdf_bytes,
                         summary={"designation": req.designation,
-                                 "commenced": req.commenced,
-                                 "concluded": req.concluded})
+                                 "commenced":   req.commenced,
+                                 "concluded":   req.concluded,
+                                 "gender":      req.gender})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
