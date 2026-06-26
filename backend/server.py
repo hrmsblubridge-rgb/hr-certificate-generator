@@ -346,7 +346,8 @@ async def generate_certificate(req: CertificateRequest, _: dict = Depends(requir
 from offer_letter import build_offer_letter
 from acknowledgement import build_acknowledgement
 from offer_letter_email import render_offer_letter  # noqa: E402
-from offer_appointment import render_docx as render_offer_appointment_docx, docx_to_pdf  # noqa: E402
+from offer_appointment import render_docx as render_offer_appointment_docx  # noqa: E402
+from offer_appointment_pdf import render_pdf as render_offer_appointment_pdf  # noqa: E402
 from mailer import send_html_email, EmailError  # noqa: E402
 
 
@@ -586,8 +587,7 @@ async def offer_appointment_pdf(req: OfferAppointmentRequest,
               "address_line1", "address_line2", "address_line3"):
         payload[k] = sanitize_text(payload[k], field=k)
     try:
-        docx_bytes = render_offer_appointment_docx(payload)
-        pdf_bytes  = docx_to_pdf(docx_bytes)
+        pdf_bytes = render_offer_appointment_pdf(payload)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     filename = f"{_safe_filestem(req.name, req.title)}.pdf"
