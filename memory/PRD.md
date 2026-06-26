@@ -57,6 +57,20 @@ spacing, margins, header, footer, logo, signature, layout).
 - **v10 (2026-01-20)** Fixed Acknowledgement letter: when HR enters an ordinal like `10th`, `12th`, `1st`, `2nd`, `3rd`, the "th"/"st"/"nd"/"rd" suffix is now auto-rendered as a **superscript** (5.83pt, baseline raised by 3pt) — matching the source PDF's `10ᵗʰ` styling exactly. Non-ordinal inputs (e.g. `Bachelor of Engineering`, `Diploma`) continue to render plain. Implemented via `_split_ordinal()` in `acknowledgement.py` plus a new `"sup"` font key wired through both the left and justified renderers.
 - **v9 (2026-01-20)** Fixed font glyph mismatch reported on the Offer Letter (e.g. lowercase `a` had subtly different top hook). Rebuilt the Arial fonts using a **graft strategy**: the original ArialMT / Arial-BoldMT subsets are extracted from the source PDF and used as the BASE font (so their glyph outlines AND hinting tables — fpgm, prep, cvt, head, hhea, OS/2 — are preserved verbatim); Liberation Sans glyphs are only added for characters the source subset doesn't contain (V, j, @, x, z, q, ₹, etc.). For every character that exists in the source subset, the rendered pixels are now **byte-identical** to the original Arial — verified at 400 DPI with `0/1,483,630` differing pixels across the salary line text.
 - **v8 (2026-01-20)** Added a **third template — Letter of Acknowledgement** as a separate tab. Editable fields: **Date**, **Name** (reflects in 2 places: address block + "Dear …,"), **Mark Sheet** (free text — HR can pick "10th", "12th", "Diploma", "Bachelor's Degree", "Master's Degree" or type any custom value). Implementation: `backend/acknowledgement.py` + `POST /api/ack/generate`, identical redact+re-render pipeline to the other two templates. Original header / footer / signature block / confidentiality notice are untouched. Same "type → download" UX, with a live preview on the right and a dropdown suggestion list on the Mark Sheet input.
+- **v15 (2026-02-21)** Two updates to the **Internship Certificate**:
+   1. **Typo fix — "him future" → "his future"**: para-3 of the source PDF
+      read "We wish him all the best in him future endeavors." (grammatically
+      wrong possessive). The male path now redacts only para-3 (tight
+      strip y=314→332) and re-renders "We wish him all the best in **his**
+      future endeavors." at the same baseline (y=322 ±1pt). Para-2 stays
+      pixel-identical for male. Female unchanged. Test
+      `test_certificate_gender.py::TestMalePDF` updated.
+   2. **Designation suggestions list**: the Designation input now ships with a
+      curated `<datalist>` of 21 common Blubridge intern roles (AI Research
+      Intern, Software Engineering Intern, QA Engineer Intern, …). Users get
+      a dropdown picker while still being able to type any custom value —
+      backward compatible with all historical free-text designations.
+
 - **v7 (2026-01-20)** Added a **login gate** at `/` with username/password = `admin / pass123` (hard-coded, client-side check appropriate for this single-tenant internal HR tool). UI matches the reference: light beige background, BluBridge logo, "Welcome back" card with icon-prefixed inputs, password visibility toggle, Forgot password link (shows contact-admin notice), dark navy pill Sign In button, footer copyright. Authentication state persists across page refreshes via `localStorage["bb_auth"]`. App header now exposes a Sign-out button that clears the flag and returns the user to the login screen.
 - **v6 (2026-01-17)** Fixed font-identification issue on the Offer Letter reported via Illustrator: editable text showed as "Arimo* Bold*" (asterisks = font unavailable) while original showed "Arial Regular". Renamed Arimo's internal TTF name table to identify as "ArialMT" / "Arial-BoldMT" (same identifiers the original PDF uses). Now Adobe Illustrator and any PDF font panel report "Arial Regular" / "Arial Bold" for all text in the document — no asterisks, no font substitution. Glyph data is still Arimo (Arial-metric, Apache 2.0) so the visual appearance is identical to actual Arial.
 - **v5 (2026-01-17)** Fixed two alignment issues reported on the Offer Letter:

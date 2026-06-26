@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { apiBlob } from "@/lib/api";
 
-function Field({ label, placeholder, value, onChange, testid }) {
+function Field({ label, placeholder, value, onChange, testid, listId }) {
   return (
     <label className="block mb-4">
       <span className="block text-xs font-medium text-[#1a1a1f]/70 mb-1.5">
@@ -14,11 +14,39 @@ function Field({ label, placeholder, value, onChange, testid }) {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
+        list={listId}
         className="w-full bg-[#f6f4ef] border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2.5 text-sm text-[#1a1a1f] placeholder:text-[#1a1a1f]/35 transition-colors"
       />
     </label>
   );
 }
+
+// Curated list of internship designations used by Blubridge HR.
+// `<datalist>` gives a dropdown suggestion while still allowing free typing
+// (so custom designations like "AI Research Analyst II" remain possible).
+const DESIGNATIONS = [
+  "AI Research Intern",
+  "AI Research Analyst",
+  "AI Intern",
+  "Machine Learning Intern",
+  "Data Science Intern",
+  "Data Engineering Intern",
+  "Software Engineering Intern",
+  "Backend Developer Intern",
+  "Frontend Developer Intern",
+  "Full Stack Developer Intern",
+  "Mobile App Developer Intern",
+  "DevOps Intern",
+  "Cloud Engineering Intern",
+  "Cybersecurity Intern",
+  "QA Engineer Intern",
+  "UI/UX Design Intern",
+  "Product Management Intern",
+  "Business Analyst Intern",
+  "Marketing Intern",
+  "HR Intern",
+  "Research Intern",
+];
 
 function SelectField({ label, value, onChange, testid, children }) {
   return (
@@ -80,7 +108,7 @@ function Preview({ values }) {
         valuable contributions to our research initiatives.
       </p>
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f] mt-4">
-        We wish {p.him} all the best in {p.him} future endeavors.
+        We wish {p.him} all the best in {p.his} future endeavors.
       </p>
       <p className="text-[11px] text-[#1a1a1f]/45 mt-6">
         Mock preview only &mdash; header, footer, logo, signature appear in the
@@ -165,11 +193,17 @@ export default function CertificateView() {
         />
         <Field
           label="Designation"
-          placeholder="e.g. AI Research Intern"
+          placeholder="Pick from list or type your own"
           testid="cert-input-designation"
           value={form.designation}
           onChange={set("designation")}
+          listId="cert-designation-list"
         />
+        <datalist id="cert-designation-list" data-testid="cert-designation-options">
+          {DESIGNATIONS.map((d) => (
+            <option key={d} value={d} />
+          ))}
+        </datalist>
         <SelectField
           label="Gender"
           testid="cert-input-gender"

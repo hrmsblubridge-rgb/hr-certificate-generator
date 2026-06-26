@@ -232,6 +232,14 @@ STATIC_PARA2_FEMALE = (
     "and valuable contributions to our research initiatives."
 )
 STATIC_PARA3_FEMALE = "We wish her all the best in her future endeavors."
+# Male para-3 fixes the original PDF typo ("him future" → "his future").
+# Only para-3 is redacted+re-rendered for male; para-2 stays untouched.
+STATIC_PARA3_MALE   = "We wish him all the best in his future endeavors."
+# Tight redact band around the para-3 baseline (y≈322). The painted text
+# glyphs sit roughly between y=316 and y=329 for Roboto 10pt, so a 314→332
+# strip wipes the typo without touching para-2 ("initiatives." baseline y=289)
+# or the signature block (y>360).
+STATIC_PARA3_REDACT = fitz.Rect(42.06, 314.0, 561.0, 332.0)
 
 
 def _build_filled_pdf(values: dict) -> bytes:
@@ -247,9 +255,10 @@ def _build_filled_pdf(values: dict) -> bytes:
         first-line baseline (y=212.16), and right margin.
 
     Gender handling:
-      * `male`   — pronouns in the rebuilt top paragraph use "his"/"His"; the
-        static lines 3-4 of the original PDF are NOT touched (zero pixel-level
-        risk; output is byte-equivalent in layout to the pre-feature build).
+      * `male`   — pronouns in the rebuilt top paragraph use "his"/"His";
+        para-3 of the original PDF is redacted and re-rendered with the
+        typo "him future endeavors" corrected to "his future endeavors".
+        Para-2 is left pixel-identical to the source.
       * `female` — pronouns in the rebuilt top paragraph use "her"/"Her"; the
         static lines 3-4 are also redacted and re-rendered with feminine
         pronouns at their original baselines.
@@ -275,6 +284,11 @@ def _build_filled_pdf(values: dict) -> bytes:
     page.add_redact_annot(PARA_REDACT_RECT, fill=(1, 1, 1))
     if gender == "female":
         page.add_redact_annot(STATIC_BODY_REDACT, fill=(1, 1, 1))
+    else:
+        # Male: redact only para-3 to correct the source PDF typo
+        # ("him future endeavors." → "his future endeavors."). Para-2 stays
+        # pixel-identical to the original.
+        page.add_redact_annot(STATIC_PARA3_REDACT, fill=(1, 1, 1))
     page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
 
     # 2) Shared CSS + font archive used by every htmlbox below.
@@ -307,6 +321,10 @@ def _build_filled_pdf(values: dict) -> bytes:
         page.insert_htmlbox(STATIC_PARA2_RECT, f"<p>{STATIC_PARA2_FEMALE}</p>",
                             css=css, archive=arch, scale_low=1)
         page.insert_htmlbox(STATIC_PARA3_RECT, f"<p>{STATIC_PARA3_FEMALE}</p>",
+                            css=css, archive=arch, scale_low=1)
+    else:
+        # Male: re-render only para-3 with the typo fixed ("him future" → "his future").
+        page.insert_htmlbox(STATIC_PARA3_RECT, f"<p>{STATIC_PARA3_MALE}</p>",
                             css=css, archive=arch, scale_low=1)
 
     buf = io.BytesIO()

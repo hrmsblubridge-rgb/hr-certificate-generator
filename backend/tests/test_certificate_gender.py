@@ -83,9 +83,9 @@ class TestMalePDF:
         assert "has completed his internship" in flat, f"Missing 'his internship'. Got: {flat[:400]}"
         assert "His internship tenure" in flat, "Missing 'His internship tenure'"
         assert "During his internship, he demonstrated" in flat, "Missing male para-2"
-        # Preserve original typo 'him future'
-        assert "We wish him all the best in him future endeavors." in flat, \
-            f"Missing male para-3 (with intentional 'him future' typo). Got: {flat}"
+        # Para-3 typo is now corrected: "him future" → "his future"
+        assert "We wish him all the best in his future endeavors." in flat, \
+            f"Missing male para-3 (with 'his future' fix). Got: {flat}"
 
 
 # ---- Female PDF generation ------------------------------------------------
