@@ -155,7 +155,7 @@ export default function AcknowledgementView() {
             <span>{show(form.marksheet_type, "______")}</span>{" "}
             Mark Sheet. We understand that the company is the bearer of the
             document and will return it to you upon completion of your
-            probationary period.
+            internship period.
           </div>
           <p className="mt-6 text-[10.5px] text-[#1a1a1f]/45">
             Mock preview only &mdash; the downloaded PDF preserves the
