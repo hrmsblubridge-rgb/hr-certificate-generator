@@ -3,19 +3,21 @@ import "@/App.css";
 import CertificateView from "./views/CertificateView";
 import OfferLetterView from "./views/OfferLetterView";
 import OfferLetterEmailView from "./views/OfferLetterEmailView";
+import OfferOfAppointmentView from "./views/OfferOfAppointmentView";
 import AcknowledgementView from "./views/AcknowledgementView";
 import HistoryView from "./views/HistoryView";
 import Login from "./views/Login";
 import ChangePasswordModal from "./views/ChangePasswordModal";
 import { apiFetch, apiJSON } from "@/lib/api";
-import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound, Mail } from "lucide-react";
+import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound, Mail, FileType } from "lucide-react";
 
 const MENU = [
-  { id: "certificate", label: "Internship Certificate", icon: FileText },
-  { id: "offer",       label: "Offer Letter",            icon: FileSignature },
-  { id: "offer-email", label: "Offer Letter (Email)",    icon: Mail },
-  { id: "ack",         label: "Acknowledgement",         icon: FileCheck },
-  { id: "history",     label: "History",                  icon: History },
+  { id: "certificate",   label: "Internship Certificate", icon: FileText },
+  { id: "offer",         label: "Offer Letter",            icon: FileSignature },
+  { id: "offer-email",   label: "Offer Letter (Email)",    icon: Mail },
+  { id: "offer-appoint", label: "Offer of Appointment",    icon: FileType },
+  { id: "ack",           label: "Acknowledgement",         icon: FileCheck },
+  { id: "history",       label: "History",                  icon: History },
 ];
 
 function App() {
@@ -111,6 +113,7 @@ function App() {
       {view === "certificate" ? <CertificateView />
         : view === "offer"        ? <OfferLetterView />
         : view === "offer-email"  ? <OfferLetterEmailView />
+        : view === "offer-appoint" ? <OfferOfAppointmentView />
         : view === "ack"          ? <AcknowledgementView />
         :                            <HistoryView />}
 

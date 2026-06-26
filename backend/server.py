@@ -346,6 +346,7 @@ async def generate_certificate(req: CertificateRequest, _: dict = Depends(requir
 from offer_letter import build_offer_letter
 from acknowledgement import build_acknowledgement
 from offer_letter_email import render_offer_letter  # noqa: E402
+from offer_appointment import render_docx as render_offer_appointment_docx, docx_to_pdf  # noqa: E402
 from mailer import send_html_email, EmailError  # noqa: E402
 
 
@@ -513,6 +514,89 @@ async def offer_email_send(req: OfferEmailSendRequest,
             }},
         )
     return {"ok": True, "message_id": message_id}
+
+
+# ---------------------------------------------------------------------------
+# Offer of Appointment — DOCX + PDF (LibreOffice-rendered)
+# ---------------------------------------------------------------------------
+
+class OfferAppointmentRequest(BaseModel):
+    title:            Literal["Mr.", "Ms.", "Mrs.", "Dr."]
+    name:             str = Field(min_length=1, max_length=120)
+    email:            str = Field(min_length=3, max_length=160)
+    phone:            str = Field(min_length=1, max_length=40)
+    cur_date:         str = Field(min_length=1, max_length=40)
+    date:             str = Field(min_length=1, max_length=40)
+    reference_number: str = Field(min_length=1, max_length=60)
+    designation:      str = Field(min_length=1, max_length=120)
+    address_line1:    str = Field(min_length=1, max_length=200)
+    address_line2:    str = Field(default="",   max_length=200)
+    address_line3:    str = Field(default="",   max_length=200)
+    ctc_yearly:       int = Field(gt=0, le=100_000_000)
+
+
+def _safe_filestem(name: str, title: str) -> str:
+    bare = "".join(c for c in name if c.isalnum() or c in " _-").strip().replace(" ", "_") or "Candidate"
+    title_pfx = title.rstrip(".").replace(" ", "")
+    return f"Offer_of_Appointment_{title_pfx}_{bare}"
+
+
+@api_router.post("/offer-appointment/docx")
+async def offer_appointment_docx(req: OfferAppointmentRequest,
+                                 _: dict = Depends(require_auth)):
+    """Generate the personalised offer-of-appointment DOCX and stream it."""
+    payload = req.model_dump()
+    for k in ("name", "phone", "email", "designation", "reference_number",
+              "address_line1", "address_line2", "address_line3"):
+        payload[k] = sanitize_text(payload[k], field=k)
+    try:
+        docx_bytes = render_offer_appointment_docx(payload)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    stem = _safe_filestem(req.name, req.title)
+    filename = f"{stem}.docx"
+    # Persist a single history entry that holds the DOCX bytes; the PDF
+    # endpoint below regenerates on demand from the same payload.
+    await _save_history(
+        "offer_appointment", req.name, filename, docx_bytes,
+        summary={
+            "designation":      req.designation,
+            "reference_number": req.reference_number,
+            "ctc_yearly":       req.ctc_yearly,
+            "joining_date":     req.date,
+            "letter_date":      req.cur_date,
+        },
+    )
+    return StreamingResponse(
+        io.BytesIO(docx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api_router.post("/offer-appointment/pdf")
+async def offer_appointment_pdf(req: OfferAppointmentRequest,
+                                inline: bool = False,
+                                _: dict = Depends(require_auth)):
+    """Generate the DOCX, run LibreOffice headless to convert to PDF, and
+    stream the PDF. `?inline=true` returns Content-Disposition: inline so
+    the frontend can embed it in an <iframe>; default is attachment."""
+    payload = req.model_dump()
+    for k in ("name", "phone", "email", "designation", "reference_number",
+              "address_line1", "address_line2", "address_line3"):
+        payload[k] = sanitize_text(payload[k], field=k)
+    try:
+        docx_bytes = render_offer_appointment_docx(payload)
+        pdf_bytes  = docx_to_pdf(docx_bytes)
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    filename = f"{_safe_filestem(req.name, req.title)}.pdf"
+    disposition = "inline" if inline else "attachment"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
 
 
 # ---------------------------------------------------------------------------
