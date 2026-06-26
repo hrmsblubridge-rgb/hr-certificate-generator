@@ -80,7 +80,7 @@ function Preview({ values }) {
         valuable contributions to our research initiatives.
       </p>
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f] mt-4">
-        We wish {p.him} all the best in {p.his} future endeavors.
+        We wish {p.him} all the best in {p.him} future endeavors.
       </p>
       <p className="text-[11px] text-[#1a1a1f]/45 mt-6">
         Mock preview only &mdash; header, footer, logo, signature appear in the

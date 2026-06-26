@@ -30,6 +30,10 @@ PyJWT==2.10.1
 # --- PDF generation (Roboto / Arial baking + redaction pipeline) ---
 pymupdf==1.27.2.3              # abi3 wheel — no compilation
 
+# --- DOCX generation (Offer of Appointment) ---
+python-docx==1.2.0             # pure-Python wheel — no compilation
+                               # transitively pulls lxml (cp312 wheel — no compilation)
+
 # --- Env loading ---
 python-dotenv==1.0.1
 
