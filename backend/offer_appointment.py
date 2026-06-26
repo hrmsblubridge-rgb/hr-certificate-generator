@@ -241,6 +241,20 @@ def render_docx(data: dict) -> bytes:
     return buf.getvalue()
 
 
+# Resolve the LibreOffice binary ONCE at import time. We try the standard
+# install paths so the conversion still works on hosts where /usr/local/bin
+# is preferred (some Render builds). If neither exists, `LIBREOFFICE_BIN`
+# stays None and `docx_to_pdf` raises a clear, actionable error instead of
+# a generic FileNotFoundError stack trace.
+import shutil as _shutil
+LIBREOFFICE_BIN = (
+    _shutil.which("libreoffice")
+    or _shutil.which("soffice")
+    or ("/usr/bin/libreoffice" if Path("/usr/bin/libreoffice").exists() else None)
+    or ("/usr/bin/soffice" if Path("/usr/bin/soffice").exists() else None)
+)
+
+
 # --- DOCX → PDF via LibreOffice headless ------------------------------------
 def docx_to_pdf(docx_bytes: bytes, *, timeout: int = 120) -> bytes:
     """Convert in-memory DOCX bytes to PDF bytes using LibreOffice headless.
@@ -248,13 +262,21 @@ def docx_to_pdf(docx_bytes: bytes, *, timeout: int = 120) -> bytes:
     Runs LibreOffice in a per-invocation temp profile dir so concurrent
     conversions don't race on the default profile lock.
     """
+    if not LIBREOFFICE_BIN:
+        raise RuntimeError(
+            "LibreOffice is not installed on this host. Install it with: "
+            "apt-get install -y --no-install-recommends libreoffice-core "
+            "libreoffice-writer (or add it to the Render Build Command). "
+            "The DOCX download still works; only the PDF conversion requires "
+            "LibreOffice."
+        )
     with tempfile.TemporaryDirectory(prefix="ofa-") as td:
         td_path = Path(td)
         src = td_path / "in.docx"
         src.write_bytes(docx_bytes)
         profile = td_path / "lo-profile"
         cmd = [
-            "libreoffice",
+            LIBREOFFICE_BIN,
             "--headless",
             f"-env:UserInstallation=file://{profile}",
             "--convert-to", "pdf",
@@ -270,6 +292,11 @@ def docx_to_pdf(docx_bytes: bytes, *, timeout: int = 120) -> bytes:
             raise RuntimeError(f"LibreOffice conversion failed: {stderr}") from e
         except subprocess.TimeoutExpired as e:
             raise RuntimeError("LibreOffice conversion timed out.") from e
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                "LibreOffice binary disappeared at runtime. Re-install it on "
+                "this host."
+            ) from e
         pdf_path = td_path / "in.pdf"
         if not pdf_path.exists():
             stdout = (result.stdout or b"").decode("utf-8", errors="replace")[:500]
