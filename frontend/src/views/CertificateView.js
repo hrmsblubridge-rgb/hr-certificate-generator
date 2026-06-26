@@ -48,6 +48,31 @@ const DESIGNATIONS = [
   "Research Intern",
 ];
 
+// Convert ISO date "YYYY-MM-DD" → "DD.MM.YYYY" (the format baked into the PDF).
+// Returns "" for empty / invalid input.
+function toDMY(iso) {
+  if (!iso || typeof iso !== "string") return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
+}
+
+function DateField({ label, value, onChange, testid }) {
+  return (
+    <label className="block mb-4">
+      <span className="block text-xs font-medium text-[#1a1a1f]/70 mb-1.5">
+        {label}
+      </span>
+      <input
+        data-testid={testid}
+        type="date"
+        value={value}
+        onChange={onChange}
+        className="w-full bg-[#f6f4ef] border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2.5 text-sm text-[#1a1a1f] transition-colors"
+      />
+    </label>
+  );
+}
+
 function SelectField({ label, value, onChange, testid, children }) {
   return (
     <label className="block mb-4">
@@ -85,6 +110,8 @@ function Preview({ values }) {
   const baseName = (values.name || "").replace(TITLE_RE, "").trim();
   const displayName = titleFor && baseName ? `${titleFor} ${baseName}` : baseName;
   const show = (v, fallback) => (v && v.trim() ? v : fallback);
+  const commencedDMY = toDMY(values.commenced);
+  const concludedDMY = toDMY(values.concluded);
   return (
     <div
       data-testid="cert-live-preview"
@@ -99,9 +126,9 @@ function Preview({ values }) {
         has completed {p.his} internship as an{" "}
         <span className="font-bold">{show(values.designation, "____________________")}</span>{" "}
         with Blubridge Technologies Pvt Ltd. {p.His} internship tenure commenced on{" "}
-        <span className="font-bold">{show(values.commenced, "__________")}</span>{" "}
+        <span className="font-bold">{show(commencedDMY, "__________")}</span>{" "}
         and concluded on{" "}
-        <span className="font-bold">{show(values.concluded, "__________")}</span>.
+        <span className="font-bold">{show(concludedDMY, "__________")}</span>.
       </p>
       <p className="text-[13px] leading-[1.85] text-[#1a1a1f] mt-4">
         During {p.his} internship, {p.he} demonstrated professionalism, enthusiasm, and
@@ -148,7 +175,12 @@ export default function CertificateView() {
     setBusy(true);
     setError("");
     try {
-      const blob = await apiBlob("/template/generate", { method: "POST", body: form });
+      const payload = {
+        ...form,
+        commenced: toDMY(form.commenced),
+        concluded: toDMY(form.concluded),
+      };
+      const blob = await apiBlob("/template/generate", { method: "POST", body: payload });
       const TITLE_RE = /^(mr|mrs|ms|miss)\.?\s+/i;
       const titlePrefix = form.gender === "female" ? "Ms" : "Mr";
       const bareName = form.name.replace(TITLE_RE, "").trim();
@@ -218,16 +250,14 @@ export default function CertificateView() {
           <option value="female">Female</option>
         </SelectField>
         <div className="grid grid-cols-2 gap-3">
-          <Field
+          <DateField
             label="Commenced on Date"
-            placeholder="e.g. 28.07.2025"
             testid="cert-input-commenced"
             value={form.commenced}
             onChange={set("commenced")}
           />
-          <Field
+          <DateField
             label="Concluded on Date"
-            placeholder="e.g. 24.11.2025"
             testid="cert-input-concluded"
             value={form.concluded}
             onChange={set("concluded")}

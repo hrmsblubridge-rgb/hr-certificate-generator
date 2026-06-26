@@ -57,6 +57,16 @@ spacing, margins, header, footer, logo, signature, layout).
 - **v10 (2026-01-20)** Fixed Acknowledgement letter: when HR enters an ordinal like `10th`, `12th`, `1st`, `2nd`, `3rd`, the "th"/"st"/"nd"/"rd" suffix is now auto-rendered as a **superscript** (5.83pt, baseline raised by 3pt) — matching the source PDF's `10ᵗʰ` styling exactly. Non-ordinal inputs (e.g. `Bachelor of Engineering`, `Diploma`) continue to render plain. Implemented via `_split_ordinal()` in `acknowledgement.py` plus a new `"sup"` font key wired through both the left and justified renderers.
 - **v9 (2026-01-20)** Fixed font glyph mismatch reported on the Offer Letter (e.g. lowercase `a` had subtly different top hook). Rebuilt the Arial fonts using a **graft strategy**: the original ArialMT / Arial-BoldMT subsets are extracted from the source PDF and used as the BASE font (so their glyph outlines AND hinting tables — fpgm, prep, cvt, head, hhea, OS/2 — are preserved verbatim); Liberation Sans glyphs are only added for characters the source subset doesn't contain (V, j, @, x, z, q, ₹, etc.). For every character that exists in the source subset, the rendered pixels are now **byte-identical** to the original Arial — verified at 400 DPI with `0/1,483,630` differing pixels across the salary line text.
 - **v8 (2026-01-20)** Added a **third template — Letter of Acknowledgement** as a separate tab. Editable fields: **Date**, **Name** (reflects in 2 places: address block + "Dear …,"), **Mark Sheet** (free text — HR can pick "10th", "12th", "Diploma", "Bachelor's Degree", "Master's Degree" or type any custom value). Implementation: `backend/acknowledgement.py` + `POST /api/ack/generate`, identical redact+re-render pipeline to the other two templates. Original header / footer / signature block / confidentiality notice are untouched. Same "type → download" UX, with a live preview on the right and a dropdown suggestion list on the Mark Sheet input.
+- **v16 (2026-02-21)** **Internship Certificate — Date pickers**: replaced
+  the two free-text date fields ("Commenced on Date" / "Concluded on Date")
+  with native HTML5 `<input type="date">` widgets. Users get a calendar
+  popup, can't type invalid dates, and locale-correct rendering. A small
+  `toDMY()` helper converts the ISO `YYYY-MM-DD` value to the
+  `DD.MM.YYYY` format the PDF expects, both in the live preview and in
+  the POST payload to `/api/template/generate`. Backend untouched (still
+  receives "28.07.2025" / "24.11.2025"). Verified end-to-end: PDF still
+  bakes correct dates at original baselines.
+
 - **v15 (2026-02-21)** Two updates to the **Internship Certificate**:
    1. **Typo fix — "him future" → "his future"**: para-3 of the source PDF
       read "We wish him all the best in him future endeavors." (grammatically
