@@ -129,6 +129,10 @@ def render_pdf(data: dict) -> bytes:
         ("Ms. Revathi Thiruppathi,", full_name),
         ("Ms. Revathi Thiruppathi", full_name),
         ("Dear Revathi Thiruppathi", f"Dear {full_name}"),
+        # Last page has the candidate's printed name wrapped in parentheses
+        # with stray padding spaces: "( Revathi Thiruppathi  )". Consume the
+        # surrounding spaces so the new name sits flush inside the parens.
+        ("( Revathi Thiruppathi )", f"({name})"),
         ("Revathi Thiruppathi", name),
         ("CHN/2025/Res/1-026", ref_number),
         ("2/162 E, Nethaji Nagar, 3rd cross,", addr1),

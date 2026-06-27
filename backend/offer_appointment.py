@@ -201,6 +201,10 @@ def render_docx(data: dict) -> bytes:
         ("Ms. Revathi Thiruppathi,", full_name),
         ("Ms. Revathi Thiruppathi", full_name),
         ("Dear Revathi Thiruppathi", f"Dear {full_name}"),
+        # Last page wraps the printed name in parens with padding spaces:
+        # "( Revathi Thiruppathi  )". Drop the spaces so the new name fits
+        # snugly inside the parens.
+        ("( Revathi Thiruppathi )", f"({name})"),
         # Bare name (signature lines, table cells)
         ("Revathi Thiruppathi", name),
         # Address
