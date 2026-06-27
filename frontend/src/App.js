@@ -55,7 +55,8 @@ function App() {
   return (
     <div className="min-h-screen bg-[#f6f4ef] text-[#1a1a1f]">
       <header className="border-b border-[#1a1a1f]/10 bg-[#f6f4ef]/95 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4 flex-wrap lg:flex-nowrap">
+        {/* Row 1 — brand + account chip */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 pb-2 flex items-center gap-4">
           <div className="flex items-center gap-3 shrink-0">
             <img
               src="/img/blubridge-logo.webp"
@@ -63,8 +64,50 @@ function App() {
               className="w-auto"
               draggable={false}
             />
+            
           </div>
-          <nav className="flex items-center gap-1 bg-white border border-[#1a1a1f]/10 rounded-full p-1 overflow-x-auto max-w-full">
+
+          <div className="ml-auto flex items-center gap-2">
+            <div
+              data-testid="user-chip"
+              className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#1a1a1f]/10 text-xs font-medium text-[#1a1a1f]/80"
+              title={`Signed in as ${username || "admin"}`}
+            >
+              <span
+                aria-hidden="true"
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#232369] text-white text-[10px] font-bold uppercase"
+              >
+                {(username || "A").charAt(0)}
+              </span>
+              <span>{username || "admin"}</span>
+            </div>
+            <button
+              data-testid="change-password-btn"
+              onClick={() => setShowChangePw(true)}
+              title="Change password"
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full text-[#1a1a1f]/75 hover:text-[#1a1a1f] bg-white border border-[#1a1a1f]/10 hover:border-[#232369]/40 transition-colors whitespace-nowrap"
+            >
+              <KeyRound size={13} />
+              <span className="hidden lg:inline">Change password</span>
+            </button>
+            <button
+              data-testid="logout-btn"
+              onClick={logout}
+              title="Sign out"
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full text-[#1a1a1f]/75 hover:text-white hover:bg-[#232369] bg-white border border-[#1a1a1f]/10 hover:border-[#232369] transition-colors whitespace-nowrap"
+            >
+              <LogOut size={13} />
+              <span className="hidden lg:inline">Sign out</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Row 2 — primary navigation (clean tab bar with active underline) */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <nav
+            data-testid="primary-nav"
+            className="flex items-stretch gap-0.5 overflow-x-auto -mb-px"
+          >
             {MENU.map((m) => {
               const Icon = m.icon;
               const active = view === m.id;
@@ -74,39 +117,20 @@ function App() {
                   data-testid={`menu-${m.id}`}
                   onClick={() => setView(m.id)}
                   title={m.label}
+                  aria-current={active ? "page" : undefined}
                   className={
-                    "inline-flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full transition-colors whitespace-nowrap shrink-0 " +
+                    "relative inline-flex items-center gap-2 text-[13px] font-medium px-3.5 py-3 transition-colors whitespace-nowrap shrink-0 border-b-2 " +
                     (active
-                      ? "bg-[#232369] text-white"
-                      : "text-[#1a1a1f]/70 hover:text-[#1a1a1f]")
+                      ? "text-[#232369] border-[#232369]"
+                      : "text-[#1a1a1f]/60 hover:text-[#1a1a1f] border-transparent hover:border-[#1a1a1f]/15")
                   }
                 >
-                  <Icon size={14} />
-                  <span className="hidden md:inline">{m.label}</span>
+                  <Icon size={15} className={active ? "text-[#232369]" : "text-[#1a1a1f]/55"} />
+                  <span>{m.label}</span>
                 </button>
               );
             })}
           </nav>
-          <div className="flex items-center gap-1 ml-auto shrink-0">
-            <button
-              data-testid="change-password-btn"
-              onClick={() => setShowChangePw(true)}
-              title="Change password"
-              className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-full text-[#1a1a1f]/70 hover:text-[#1a1a1f] hover:bg-white border border-transparent hover:border-[#1a1a1f]/10 transition-colors whitespace-nowrap"
-            >
-              <KeyRound size={14} />
-              <span className="hidden xl:inline">Change password</span>
-            </button>
-            <button
-              data-testid="logout-btn"
-              onClick={logout}
-              title="Sign out"
-              className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-full text-[#1a1a1f]/70 hover:text-[#1a1a1f] hover:bg-white border border-transparent hover:border-[#1a1a1f]/10 transition-colors whitespace-nowrap"
-            >
-              <LogOut size={14} />
-              <span className="hidden xl:inline">Sign out</span>
-            </button>
-          </div>
         </div>
       </header>
 

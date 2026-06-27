@@ -57,6 +57,27 @@ spacing, margins, header, footer, logo, signature, layout).
 - **v10 (2026-01-20)** Fixed Acknowledgement letter: when HR enters an ordinal like `10th`, `12th`, `1st`, `2nd`, `3rd`, the "th"/"st"/"nd"/"rd" suffix is now auto-rendered as a **superscript** (5.83pt, baseline raised by 3pt) — matching the source PDF's `10ᵗʰ` styling exactly. Non-ordinal inputs (e.g. `Bachelor of Engineering`, `Diploma`) continue to render plain. Implemented via `_split_ordinal()` in `acknowledgement.py` plus a new `"sup"` font key wired through both the left and justified renderers.
 - **v9 (2026-01-20)** Fixed font glyph mismatch reported on the Offer Letter (e.g. lowercase `a` had subtly different top hook). Rebuilt the Arial fonts using a **graft strategy**: the original ArialMT / Arial-BoldMT subsets are extracted from the source PDF and used as the BASE font (so their glyph outlines AND hinting tables — fpgm, prep, cvt, head, hhea, OS/2 — are preserved verbatim); Liberation Sans glyphs are only added for characters the source subset doesn't contain (V, j, @, x, z, q, ₹, etc.). For every character that exists in the source subset, the rendered pixels are now **byte-identical** to the original Arial — verified at 400 DPI with `0/1,483,630` differing pixels across the salary line text.
 - **v8 (2026-01-20)** Added a **third template — Letter of Acknowledgement** as a separate tab. Editable fields: **Date**, **Name** (reflects in 2 places: address block + "Dear …,"), **Mark Sheet** (free text — HR can pick "10th", "12th", "Diploma", "Bachelor's Degree", "Master's Degree" or type any custom value). Implementation: `backend/acknowledgement.py` + `POST /api/ack/generate`, identical redact+re-render pipeline to the other two templates. Original header / footer / signature block / confidentiality notice are untouched. Same "type → download" UX, with a live preview on the right and a dropdown suggestion list on the Mark Sheet input.
+- **v17 (2026-02-21)** Two coordinated UX upgrades:
+   1. **Date pickers everywhere** — the two remaining text-based date fields
+      now use native HTML5 `<input type="date">` widgets:
+        - **Acknowledgement** "Date" — ISO converted to `"Jan 09, 2026"` via
+          `isoToLongDate()` before POST (also reflects in preview).
+        - **Offer Letter** "Date" — ISO converted to `"DD-MM-YYYY"` via
+          `isoToDashDMY()`; reflects in both preview locations (header
+          `Date:` and body "commence on …").
+      Certificate, Offer Letter (Email), and Offer of Appointment already
+      had date pickers. Backend wire formats unchanged.
+   2. **Refined top navigation** — replaced the cramped pill-in-pill nav
+      with a two-row header:
+        - **Row 1**: BluBridge logo + "HR CONSOLE / Document Generator"
+          wordmark · `user-chip` (avatar dot + username) · outline-style
+          Change password / Sign out buttons.
+        - **Row 2**: full-width tab bar with all labels always visible
+          (no more "Acknowledg…" truncation), active tab highlighted with
+          a navy underline + matching text/icon color.
+      Pure CSS — no new dependencies. All existing `data-testid` selectors
+      (menu-*, change-password-btn, logout-btn) preserved.
+
 - **v16 (2026-02-21)** **Internship Certificate — Date pickers**: replaced
   the two free-text date fields ("Commenced on Date" / "Concluded on Date")
   with native HTML5 `<input type="date">` widgets. Users get a calendar

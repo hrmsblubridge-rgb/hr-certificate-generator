@@ -25,6 +25,33 @@ function Field({ label, placeholder, value, onChange, testid, list }) {
   );
 }
 
+// ISO "YYYY-MM-DD" → "Jan 09, 2026" (the format used on the source PDF).
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function isoToLongDate(iso) {
+  if (!iso || typeof iso !== "string") return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return iso;
+  const yyyy = m[1], mm = parseInt(m[2], 10), dd = m[3];
+  return `${MONTHS[mm - 1]} ${dd}, ${yyyy}`;
+}
+
+function DateField({ label, value, onChange, testid }) {
+  return (
+    <label className="block mb-4">
+      <span className="block text-xs font-medium text-[#1a1a1f]/70 mb-1.5">
+        {label}
+      </span>
+      <input
+        data-testid={testid}
+        type="date"
+        value={value}
+        onChange={onChange}
+        className="w-full bg-[#f6f4ef] border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2.5 text-sm text-[#1a1a1f] transition-colors"
+      />
+    </label>
+  );
+}
+
 export default function AcknowledgementView() {
   const [form, setForm] = useState({ date: "", name: "", marksheet_type: "" });
   const [busy, setBusy] = useState(false);
@@ -40,7 +67,8 @@ export default function AcknowledgementView() {
     setBusy(true);
     setError("");
     try {
-      const blob = await apiBlob("/ack/generate", { method: "POST", body: form });
+      const payload = { ...form, date: isoToLongDate(form.date) };
+      const blob = await apiBlob("/ack/generate", { method: "POST", body: payload });
       const safe =
         form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") || "Acknowledgement";
       const url = URL.createObjectURL(blob);
@@ -75,9 +103,8 @@ export default function AcknowledgementView() {
           Fill the fields, download the Acknowledgement PDF.
         </h2>
 
-        <Field
+        <DateField
           label="Date"
-          placeholder="e.g. Jan 09, 2026"
           testid="ack-input-date"
           value={form.date}
           onChange={set("date")}
@@ -143,7 +170,7 @@ export default function AcknowledgementView() {
           <div className="text-center font-semibold tracking-tight mb-6 text-[#231F20]">
             LETTER OF ACKNOWLEDGEMENT OF ORIGINAL DOCUMENT
           </div>
-          <div>{show(form.date, "____________")}</div>
+          <div>{show(isoToLongDate(form.date), "____________")}</div>
           <div className="font-bold mt-3">{show(form.name, "____________")}</div>
           <div>Chennai</div>
           <div className="mt-5">

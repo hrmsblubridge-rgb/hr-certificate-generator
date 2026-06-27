@@ -41,6 +41,30 @@ function Field({ label, placeholder, value, onChange, testid, prefix }) {
   );
 }
 
+// ISO "YYYY-MM-DD" → "DD-MM-YYYY" (the format the source offer letter uses).
+function isoToDashDMY(iso) {
+  if (!iso || typeof iso !== "string") return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
+}
+
+function DateField({ label, value, onChange, testid }) {
+  return (
+    <label className="block mb-4">
+      <span className="block text-xs font-medium text-[#1a1a1f]/70 mb-1.5">
+        {label}
+      </span>
+      <input
+        data-testid={testid}
+        type="date"
+        value={value}
+        onChange={onChange}
+        className="w-full bg-[#f6f4ef] border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2.5 text-sm text-[#1a1a1f] transition-colors"
+      />
+    </label>
+  );
+}
+
 export default function OfferLetterView() {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -60,7 +84,8 @@ export default function OfferLetterView() {
     setBusy(true);
     setError("");
     try {
-      const blob = await apiBlob("/offer/generate", { method: "POST", body: form });
+      const payload = { ...form, date: isoToDashDMY(form.date) };
+      const blob = await apiBlob("/offer/generate", { method: "POST", body: payload });
       const safeName =
         form.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().replace(/\s+/g, "_") || "Offer";
       const url = URL.createObjectURL(blob);
@@ -104,9 +129,8 @@ export default function OfferLetterView() {
             value={form.ref_code}
             onChange={set("ref_code")}
           />
-          <Field
+          <DateField
             label="Date"
-            placeholder="10-06-2026"
             testid="offer-input-date"
             value={form.date}
             onChange={set("date")}
@@ -231,7 +255,7 @@ export default function OfferLetterView() {
             </div>
             <div>
               <span className="font-bold">Date: </span>
-              <span>{show(form.date, "__________")}</span>
+              <span>{show(isoToDashDMY(form.date), "__________")}</span>
             </div>
           </div>
 
@@ -265,7 +289,7 @@ export default function OfferLetterView() {
           </div>
           <div className="mt-3">
             Your internship engagement shall commence on{" "}
-            <span>{show(form.date, "__________")}</span> and shall continue
+            <span>{show(isoToDashDMY(form.date), "__________")}</span> and shall continue
             until such time...
           </div>
           <p className="mt-6 text-[10.5px] text-[#1a1a1f]/45">
