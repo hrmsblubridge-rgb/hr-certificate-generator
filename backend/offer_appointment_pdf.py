@@ -108,6 +108,18 @@ def render_pdf(data: dict) -> bytes:
 
     doc = fitz.open(str(SOURCE_PDF))
 
+    # Overwrite the source PDF's metadata so browsers don't surface
+    # "Revathi Thiruppathi .docx" (the original Google-Docs export title)
+    # as the suggested filename in the PDF viewer / Save-As dialog.
+    doc.set_metadata({
+        "title":  f"Offer of Appointment — {full_name}",
+        "author": "Blubridge Technologies Pvt Ltd",
+        "subject": "Offer of Appointment",
+        "keywords": "",
+        "creator": "Blubridge HR Document Generator",
+        "producer": "Blubridge HR Document Generator",
+    })
+
     # ---- Global per-page substitutions (longest patterns first to avoid
     #      partial overlaps like "Revathi" matching inside "Ms. Revathi"). --
     global_mappings: List[Tuple[str, str]] = [

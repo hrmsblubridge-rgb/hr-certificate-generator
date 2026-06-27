@@ -238,6 +238,14 @@ def render_docx(data: dict) -> bytes:
     # ---- 3. Compensation table — proportional rescale ---------------------
     _rewrite_compensation_table(doc.tables[0], comp, tier_label)
 
+    # ---- 3b. Core metadata — overwrite the generic "Word Document" title
+    # with the candidate's offer so Word / Google Docs / browsers display the
+    # right tab title (and never surface the source template's name).
+    cp = doc.core_properties
+    cp.title    = f"Offer of Appointment — {full_name}"
+    cp.subject  = "Offer of Appointment"
+    cp.author   = "Blubridge Technologies Pvt Ltd"
+
     # ---- 4. Serialise ------------------------------------------------------
     buf = io.BytesIO()
     doc.save(buf)
