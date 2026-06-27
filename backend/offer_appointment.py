@@ -196,6 +196,9 @@ def render_docx(data: dict) -> bytes:
     # ORDER matters: replace LONGER strings first to avoid partial matches.
     mappings: List[Tuple[str, str]] = [
         # Salutation forms (must come before bare "Revathi Thiruppathi")
+        # Annexure D has a stray trailing comma after the name in the source
+        # template — consume it explicitly to keep the new name clean.
+        ("Ms. Revathi Thiruppathi,", full_name),
         ("Ms. Revathi Thiruppathi", full_name),
         ("Dear Revathi Thiruppathi", f"Dear {full_name}"),
         # Bare name (signature lines, table cells)

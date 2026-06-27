@@ -111,6 +111,10 @@ def render_pdf(data: dict) -> bytes:
     # ---- Global per-page substitutions (longest patterns first to avoid
     #      partial overlaps like "Revathi" matching inside "Ms. Revathi"). --
     global_mappings: List[Tuple[str, str]] = [
+        # Annexure D (page 7) keeps a stray trailing comma after the name in
+        # the source template. Match it explicitly *before* the more general
+        # pattern so the comma is consumed by the redaction rect.
+        ("Ms. Revathi Thiruppathi,", full_name),
         ("Ms. Revathi Thiruppathi", full_name),
         ("Dear Revathi Thiruppathi", f"Dear {full_name}"),
         ("Revathi Thiruppathi", name),
