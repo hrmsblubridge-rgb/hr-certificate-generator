@@ -61,17 +61,9 @@ function App() {
             <img
               src="/img/blubridge-logo.webp"
               alt="BluBridge"
-              className="h-8 w-auto"
+              className="w-auto"
               draggable={false}
             />
-            <div className="hidden sm:flex flex-col leading-tight pl-3 border-l border-[#1a1a1f]/15">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-[#1a1a1f]/55">
-                HR Console
-              </span>
-              <span className="text-sm font-semibold text-[#1a1a1f]">
-                Document Generator
-              </span>
-            </div>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
