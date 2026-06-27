@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { apiBlob } from "@/lib/api";
+import { DESIGNATIONS } from "@/lib/designations";
 
 const EMPTY = {
   ref_code: "",
@@ -16,7 +17,7 @@ const EMPTY = {
   salary_words: "",
 };
 
-function Field({ label, placeholder, value, onChange, testid, prefix }) {
+function Field({ label, placeholder, value, onChange, testid, prefix, listId }) {
   return (
     <label className="block mb-4">
       <span className="block text-xs font-medium text-[#1a1a1f]/70 mb-1.5">
@@ -34,6 +35,7 @@ function Field({ label, placeholder, value, onChange, testid, prefix }) {
           value={value}
           onChange={onChange}
           placeholder={placeholder}
+          list={listId}
           className="w-full bg-transparent focus:outline-none px-3 py-2.5 text-sm text-[#1a1a1f] placeholder:text-[#1a1a1f]/35"
         />
       </div>
@@ -185,11 +187,17 @@ export default function OfferLetterView() {
 
         <Field
           label="Designation"
-          placeholder="AI Research Intern"
+          placeholder="Pick from list or type your own"
           testid="offer-input-designation"
           value={form.designation}
           onChange={set("designation")}
+          listId="offer-designation-list"
         />
+        <datalist id="offer-designation-list" data-testid="offer-designation-options">
+          {DESIGNATIONS.map((d) => (
+            <option key={d} value={d} />
+          ))}
+        </datalist>
 
         <div className="grid grid-cols-2 gap-3">
           <Field

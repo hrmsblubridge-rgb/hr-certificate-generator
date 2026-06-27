@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2 } from "lucide-react";
 import { apiBlob } from "@/lib/api";
+import { DESIGNATIONS } from "@/lib/designations";
 
 function Field({ label, placeholder, value, onChange, testid, listId }) {
   return (
@@ -24,29 +25,6 @@ function Field({ label, placeholder, value, onChange, testid, listId }) {
 // Curated list of internship designations used by Blubridge HR.
 // `<datalist>` gives a dropdown suggestion while still allowing free typing
 // (so custom designations like "AI Research Analyst II" remain possible).
-const DESIGNATIONS = [
-  "AI Research Intern",
-  "AI Research Analyst",
-  "AI Intern",
-  "Machine Learning Intern",
-  "Data Science Intern",
-  "Data Engineering Intern",
-  "Software Engineering Intern",
-  "Backend Developer Intern",
-  "Frontend Developer Intern",
-  "Full Stack Developer Intern",
-  "Mobile App Developer Intern",
-  "DevOps Intern",
-  "Cloud Engineering Intern",
-  "Cybersecurity Intern",
-  "QA Engineer Intern",
-  "UI/UX Design Intern",
-  "Product Management Intern",
-  "Business Analyst Intern",
-  "Marketing Intern",
-  "HR Intern",
-  "Research Intern",
-];
 
 // Convert ISO date "YYYY-MM-DD" → "DD.MM.YYYY" (the format baked into the PDF).
 // Returns "" for empty / invalid input.

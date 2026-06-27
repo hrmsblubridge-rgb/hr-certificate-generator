@@ -61,10 +61,17 @@ function App() {
             <img
               src="/img/blubridge-logo.webp"
               alt="BluBridge"
-              className="w-auto"
+              className="h-8 w-auto"
               draggable={false}
             />
-            
+            <div className="hidden sm:flex flex-col leading-tight pl-3 border-l border-[#1a1a1f]/15">
+              <span className="text-[11px] uppercase tracking-[0.18em] text-[#1a1a1f]/55">
+                HR Console
+              </span>
+              <span className="text-sm font-semibold text-[#1a1a1f]">
+                Document Generator
+              </span>
+            </div>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -106,7 +113,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <nav
             data-testid="primary-nav"
-            className="flex items-stretch gap-0.5 overflow-x-auto -mb-px"
+            className="flex items-stretch justify-center gap-0.5 overflow-x-auto -mb-px"
           >
             {MENU.map((m) => {
               const Icon = m.icon;
