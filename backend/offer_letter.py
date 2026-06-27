@@ -105,7 +105,7 @@ def _build_replacements(v: dict) -> List[LineReplacement]:
 
         # ---- PAGE 1 ADDRESS BLOCK ------------------------------------------
         (0, fitz.Rect(72, 178, 545, 194), "left", 188.5, LEFT_MARGIN, 0.0,
-            [(f'{v["name"]} ,', "bold"), (" ", "reg")]),
+            [(f'{v["name"]},', "bold"), (" ", "reg")]),
         (0, fitz.Rect(72, 191, 545, 206), "left", 201.5, LEFT_MARGIN, 0.0,
             [(f'{v["addr1"]}', "reg")]),
         (0, fitz.Rect(72, 204, 545, 219), "left", 214.5, LEFT_MARGIN, 0.0,
