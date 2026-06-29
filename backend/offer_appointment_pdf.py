@@ -57,6 +57,15 @@ def _replace_text_pdf(page, old: str, new: str, *, max_hits: int = 999,
     text lands exactly where the old text was. `page_filter_fn(rect)` can
     veto specific bbox hits (used to scope the global "Tier 2" replacement
     to the Annexure-A header only, not the tier-bands reference table).
+
+    Multi-line matches: PyMuPDF's `search_for` returns one rect PER LINE for
+    a single logical match (e.g. "Research Scientist" wrapping across two
+    lines). To avoid duplicating the replacement string at every line, we
+    group rects that look like wrap-continuations (next rect starts at the
+    left margin AND has a higher y than the previous one) and only draw
+    the replacement at the FIRST rect of each group. Remaining rects in the
+    group are redacted only (the visual void is acceptable; the replacement
+    string already contains the full text).
     """
     rects = page.search_for(old)
     if not rects:
@@ -65,12 +74,29 @@ def _replace_text_pdf(page, old: str, new: str, *, max_hits: int = 999,
         rects = [r for r in rects if page_filter_fn(r)]
     if not rects:
         return 0
-    placements = []
+
+    # Group rects belonging to the same multi-line match. A continuation
+    # rect starts well to the LEFT of the previous rect AND is BELOW it
+    # (PDF y grows downward).
+    groups: List[List[fitz.Rect]] = []
     for r in rects[:max_hits]:
-        _, size, bold = _get_font_at(page, r)
+        if groups:
+            prev = groups[-1][-1]
+            same_match = r.y0 > prev.y0 + 2 and r.x0 < prev.x0 - 5
+            if same_match:
+                groups[-1].append(fitz.Rect(r))
+                continue
+        groups.append([fitz.Rect(r)])
+
+    placements = []
+    for group in groups:
+        first = group[0]
+        _, size, bold = _get_font_at(page, first)
         font = DEFAULT_FONT_BOLD if bold else DEFAULT_FONT
-        placements.append((fitz.Rect(r), font, size))
-        page.add_redact_annot(r, fill=(1, 1, 1))
+        placements.append((first, font, size))
+        # Redact ALL rects in the group (clear leftover glyphs on wrap lines).
+        for r in group:
+            page.add_redact_annot(r, fill=(1, 1, 1))
     page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
     for r, font, size in placements:
         # PyMuPDF places text with the baseline AT the y-coordinate, so we
@@ -123,15 +149,19 @@ def render_pdf(data: dict) -> bytes:
     # ---- Global per-page substitutions (longest patterns first to avoid
     #      partial overlaps like "Revathi" matching inside "Ms. Revathi"). --
     global_mappings: List[Tuple[str, str]] = [
+        # Page-1 "Dear …" salutation has a SPACE before the comma in the
+        # source ("Dear Ms. Revathi Thiruppathi ,"). Match the space-comma
+        # variant first and emit a tight "<full_name>," (no stray gap).
+        ("Ms. Revathi Thiruppathi ,", f"{full_name},"),
         # Annexure D (page 7) keeps a stray trailing comma after the name in
         # the source template. Match it explicitly *before* the more general
         # pattern so the comma is consumed by the redaction rect.
         ("Ms. Revathi Thiruppathi,", full_name),
         ("Ms. Revathi Thiruppathi", full_name),
         ("Dear Revathi Thiruppathi", f"Dear {full_name}"),
-        # Last page has the candidate's printed name wrapped in parentheses
-        # with stray padding spaces: "( Revathi Thiruppathi  )". Consume the
-        # surrounding spaces so the new name sits flush inside the parens.
+        # Last page wraps the printed name in parens with padding spaces:
+        # "( Revathi Thiruppathi  )". Drop the spaces so the new name fits
+        # snugly inside the parens.
         ("( Revathi Thiruppathi )", f"({name})"),
         ("Revathi Thiruppathi", name),
         ("CHN/2025/Res/1-026", ref_number),
@@ -146,10 +176,14 @@ def render_pdf(data: dict) -> bytes:
         # occurrences get the LETTER date.
         ("join on 08-June-2026", f"join on {joining}"),
         ("08-June-2026", cur_date),
-        # CTC figures + words
-        ("Rs 660,000", f"Rs {ctc_str}"),
-        ("Indian Rupees Six Lakh Sixty Thousand",
-         f"Indian Rupees {ctc_words}"),
+        # CTC figures + words — combined into ONE match (including the
+        # trailing period) so the redact rect spans through the full clause.
+        # This guarantees the space between "Rs <amount>" and "(Indian
+        # Rupees …)" *and* the terminal period before "Please refer …" are
+        # all preserved regardless of the width difference between US and
+        # Indian comma formatting.
+        ("Rs 660,000 (Indian Rupees Six Lakh Sixty Thousand). Please",
+         f"Rs {ctc_str} (Indian Rupees {ctc_words}). Please"),
         # Compensation table values (Annexure A, page 3) — reference values
         # @ CTC=660,000 get rescaled.
         ("2,97,000", indian_format(comp["basic"] + comp["hra"])),
