@@ -57,6 +57,21 @@ spacing, margins, header, footer, logo, signature, layout).
 - **v10 (2026-01-20)** Fixed Acknowledgement letter: when HR enters an ordinal like `10th`, `12th`, `1st`, `2nd`, `3rd`, the "th"/"st"/"nd"/"rd" suffix is now auto-rendered as a **superscript** (5.83pt, baseline raised by 3pt) — matching the source PDF's `10ᵗʰ` styling exactly. Non-ordinal inputs (e.g. `Bachelor of Engineering`, `Diploma`) continue to render plain. Implemented via `_split_ordinal()` in `acknowledgement.py` plus a new `"sup"` font key wired through both the left and justified renderers.
 - **v9 (2026-01-20)** Fixed font glyph mismatch reported on the Offer Letter (e.g. lowercase `a` had subtly different top hook). Rebuilt the Arial fonts using a **graft strategy**: the original ArialMT / Arial-BoldMT subsets are extracted from the source PDF and used as the BASE font (so their glyph outlines AND hinting tables — fpgm, prep, cvt, head, hhea, OS/2 — are preserved verbatim); Liberation Sans glyphs are only added for characters the source subset doesn't contain (V, j, @, x, z, q, ₹, etc.). For every character that exists in the source subset, the rendered pixels are now **byte-identical** to the original Arial — verified at 400 DPI with `0/1,483,630` differing pixels across the salary line text.
 - **v8 (2026-01-20)** Added a **third template — Letter of Acknowledgement** as a separate tab. Editable fields: **Date**, **Name** (reflects in 2 places: address block + "Dear …,"), **Mark Sheet** (free text — HR can pick "10th", "12th", "Diploma", "Bachelor's Degree", "Master's Degree" or type any custom value). Implementation: `backend/acknowledgement.py` + `POST /api/ack/generate`, identical redact+re-render pipeline to the other two templates. Original header / footer / signature block / confidentiality notice are untouched. Same "type → download" UX, with a live preview on the right and a dropdown suggestion list on the Mark Sheet input.
+- **v19 (2026-02-21)** **Offer of Appointment PDF — page-1 item-1 paragraph
+  re-flow fix.** Previous approach inserted the full new designation at the
+  first matched rect (end of line 1), so long designations like
+  "AI Research Analyst" overflowed the right margin and line 2 started with
+  an orphaned ", operating…". New `_rewrite_offer_paragraph()` in
+  `offer_appointment_pdf.py` redacts BOTH paragraph lines and re-renders the
+  whole sentence with greedy word-wrap: non-last lines are justified to the
+  original right edge (x≈541.8), last line left-aligned; bold/regular span
+  styling preserved ("<designation>," and "Besant Nagar, Chennai" bold).
+  Works for any designation length (verified with short, long, very-long).
+  When designation == "Research Scientist" the source bytes are untouched.
+  "Research Scientist" removed from global mappings; page-3 Annexure A
+  header keeps a page-scoped single-line replacement. Verified E2E via
+  `POST /api/offer-appointment/pdf` (200, correct wrap + page 3 + 22 pages).
+
 - **v18 (2026-02-21)** Polish pass on navigation + designation parity:
    1. **Centered top navigation** — the primary tab bar in `App.js` is now
       horizontally centered (`justify-center`) instead of left-aligned,

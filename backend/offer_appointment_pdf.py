@@ -112,6 +112,83 @@ def _replace_text_pdf(page, old: str, new: str, *, max_hits: int = 999,
     return len(placements)
 
 
+def _rewrite_offer_paragraph(page, designation: str) -> bool:
+    """Re-flow the page-1 item-1 paragraph ("With reference to our
+    discussions … office.") with the operator-supplied designation.
+
+    The source paragraph is justified across two lines with the bold
+    designation straddling the line break ("Research" / "Scientist,").
+    Simply overwriting the matched rects overflows the right margin when
+    the new designation is longer. Instead we redact BOTH full lines and
+    re-render the whole paragraph with greedy word-wrap: every line except
+    the last is justified to the original right edge, the last line is
+    left-aligned — matching the source layout for any designation length.
+    """
+    d = page.get_text("dict")
+    para_lines = []
+    for b in d.get("blocks", []):
+        for l in b.get("lines", []):
+            text = "".join(s["text"] for s in l.get("spans", []))
+            if "With reference to our discussions" in text:
+                para_lines = [l]
+            elif para_lines and "operating out of our" in text:
+                para_lines.append(l)
+    if len(para_lines) < 2:
+        return False
+
+    line1, line2 = para_lines[0], para_lines[1]
+    x_left    = line1["bbox"][0]
+    x_right   = line1["bbox"][2]           # justified right edge
+    baseline1 = line1["spans"][0]["origin"][1]
+    line_step = line2["spans"][0]["origin"][1] - baseline1
+    size      = line1["spans"][0]["size"]
+
+    for l in (line1, line2):
+        page.add_redact_annot(fitz.Rect(l["bbox"]), fill=(1, 1, 1))
+    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+
+    # Token stream: (word, is_bold) — mirrors the source span styling.
+    segments = [
+        ("With reference to our discussions, we are pleased to offer you "
+         "appointment in our Organization as", False),
+        (f"{designation},", True),
+        ("operating out of our", False),
+        ("Besant Nagar, Chennai", True),
+        ("office.", False),
+    ]
+    words = [(w, bold) for seg, bold in segments for w in seg.split()]
+
+    space_w = fitz.get_text_length(" ", fontname=DEFAULT_FONT, fontsize=size)
+    max_w   = x_right - x_left
+
+    # Greedy wrap: cur_w tracks the sum of word widths only.
+    lines: List[Tuple[list, float]] = []
+    cur, cur_w = [], 0.0
+    for w, bold in words:
+        font = DEFAULT_FONT_BOLD if bold else DEFAULT_FONT
+        fw = fitz.get_text_length(w, fontname=font, fontsize=size)
+        if cur and (cur_w + fw + len(cur) * space_w) > max_w:
+            lines.append((cur, cur_w))
+            cur, cur_w = [], 0.0
+        cur.append((w, font, fw))
+        cur_w += fw
+    if cur:
+        lines.append((cur, cur_w))
+
+    y = baseline1
+    for idx, (ln, words_w) in enumerate(lines):
+        last = idx == len(lines) - 1
+        gaps = len(ln) - 1
+        gap = space_w if (last or gaps == 0) else (max_w - words_w) / gaps
+        x = x_left
+        for w, font, fw in ln:
+            page.insert_text((x, y), w, fontname=font, fontsize=size,
+                             color=DEFAULT_COLOR)
+            x += fw + gap
+        y += line_step
+    return True
+
+
 def render_pdf(data: dict) -> bytes:
     """Open the source PDF, substitute every dynamic value, return PDF bytes."""
     title       = data["title"].strip()
@@ -171,7 +248,10 @@ def render_pdf(data: dict) -> bytes:
         ("Phone: 8300233625", f"Phone: {phone}"),
         ("8300233625",        phone),
         ("revathitdgrs@gmail.com", email),
-        ("Research Scientist", designation),
+        # NOTE: "Research Scientist" is intentionally NOT in this list.
+        # Page 1 (item 1 paragraph) is re-flowed via _rewrite_offer_paragraph
+        # so long designations wrap naturally; page 3 (Annexure A header)
+        # gets a page-scoped single-line replacement below.
         # Joining-date phrase first, so the remaining "08-June-2026"
         # occurrences get the LETTER date.
         ("join on 08-June-2026", f"join on {joining}"),
@@ -210,11 +290,18 @@ def render_pdf(data: dict) -> bytes:
     # remain as a static bracket label.
     for p_idx in range(doc.page_count):
         page = doc[p_idx]
+        # Page 1: re-flow the item-1 paragraph so any designation length
+        # wraps exactly like the source layout (skip when unchanged —
+        # keeps the source bytes untouched).
+        if p_idx == 0 and designation != "Research Scientist":
+            _rewrite_offer_paragraph(page, designation)
         for old, new in global_mappings:
             if old != new and old:
                 _replace_text_pdf(page, old, new)
-        # Page-scoped: Annexure A "Tier:  Tier 2" (page 3 only).
+        # Page-scoped: Annexure A "Tier:  Tier 2" + designation cell (page 3 only).
         if p_idx == 2:   # page 3 (0-indexed)
+            if designation != "Research Scientist":
+                _replace_text_pdf(page, "Research Scientist", designation)
             _replace_text_pdf(page, "Tier 2", tier_label)
 
     out = doc.tobytes(garbage=4, deflate=True, clean=True)
