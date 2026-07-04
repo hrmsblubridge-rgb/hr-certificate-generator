@@ -147,7 +147,7 @@ export default function OfferOfAppointmentView() {
   const allFilled =
     form.title && form.name.trim() && form.email.trim() && form.phone.trim() &&
     form.cur_date_iso && form.date_iso && form.reference_number.trim() &&
-    form.designation && form.address_line1.trim() &&
+    form.designation.trim() && form.address_line1.trim() &&
     form.ctc_yearly && Number(form.ctc_yearly) > 0;
 
   const buildPayload = () => ({
@@ -158,7 +158,7 @@ export default function OfferOfAppointmentView() {
     cur_date:         isoToWordDate(form.cur_date_iso),
     date:             isoToWordDate(form.date_iso),
     reference_number: form.reference_number.trim(),
-    designation:      form.designation,
+    designation:      form.designation.trim(),
     address_line1:    form.address_line1.trim(),
     address_line2:    form.address_line2.trim(),
     address_line3:    form.address_line3.trim(),
@@ -237,11 +237,18 @@ export default function OfferOfAppointmentView() {
 
         <div className="md:border-l md:border-[#1a1a1f]/10 md:pl-10">
           <Field label="Designation" required>
-            <select data-testid="oa-designation" value={form.designation} onChange={set("designation")}
-                    className={`${inputCls} ${selectArrow}`} style={selectArrowStyle}>
-              <option value="" disabled>Select</option>
-              {DESIGNATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
+            <input
+              data-testid="oa-designation"
+              type="text"
+              list="oa-designation-options"
+              value={form.designation}
+              onChange={set("designation")}
+              placeholder="Select or type a designation"
+              className={inputCls}
+            />
+            <datalist id="oa-designation-options">
+              {DESIGNATIONS.map((d) => <option key={d} value={d} />)}
+            </datalist>
           </Field>
           <Field label="Address Line 1" required>
             <input data-testid="oa-addr1" type="text" value={form.address_line1} onChange={set("address_line1")} className={inputCls} />
