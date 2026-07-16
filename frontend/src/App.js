@@ -5,11 +5,12 @@ import OfferLetterView from "./views/OfferLetterView";
 import OfferLetterEmailView from "./views/OfferLetterEmailView";
 import OfferOfAppointmentView from "./views/OfferOfAppointmentView";
 import AcknowledgementView from "./views/AcknowledgementView";
+import NotificationEmailView from "./views/NotificationEmailView";
 import HistoryView from "./views/HistoryView";
 import Login from "./views/Login";
 import ChangePasswordModal from "./views/ChangePasswordModal";
 import { apiFetch, apiJSON } from "@/lib/api";
-import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound, Mail, FileType } from "lucide-react";
+import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound, Mail, FileType, Send } from "lucide-react";
 
 const MENU = [
   { id: "certificate",   label: "Internship Certificate", icon: FileText },
@@ -17,6 +18,7 @@ const MENU = [
   { id: "offer-email",   label: "Offer Letter (Email)",    icon: Mail },
   { id: "offer-appoint", label: "Offer of Appointment",    icon: FileType },
   { id: "ack",           label: "Acknowledgement",         icon: FileCheck },
+  { id: "notif-email",   label: "Notification Email",      icon: Send },
   { id: "history",       label: "History",                  icon: History },
 ];
 
@@ -138,6 +140,7 @@ function App() {
         : view === "offer-email"  ? <OfferLetterEmailView />
         : view === "offer-appoint" ? <OfferOfAppointmentView />
         : view === "ack"          ? <AcknowledgementView />
+        : view === "notif-email"  ? <NotificationEmailView />
         :                            <HistoryView />}
 
       {showChangePw && (

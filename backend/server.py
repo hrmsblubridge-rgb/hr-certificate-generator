@@ -367,6 +367,13 @@ from offer_letter_email import render_offer_letter  # noqa: E402
 from offer_appointment import render_docx as render_offer_appointment_docx  # noqa: E402
 from offer_appointment_pdf import render_pdf as render_offer_appointment_pdf  # noqa: E402
 from mailer import send_html_email, EmailError  # noqa: E402
+from employees import (  # noqa: E402
+    bootstrap_employees_if_empty,
+    parse_employees_xlsx,
+    replace_all_employees,
+    list_employees,
+    list_departments,
+)
 
 
 class OfferRequest(BaseModel):
@@ -618,6 +625,59 @@ async def offer_appointment_pdf(req: OfferAppointmentRequest,
 
 
 # ---------------------------------------------------------------------------
+# Notification Email — compose helper (roster + Gmail deep-link builder)
+# ---------------------------------------------------------------------------
+# The app never sends these emails itself. It only helps HR assemble the To /
+# CC / BCC / Subject / Body strings by department so they can paste them into
+# their own mail client (or click the "Open in Gmail" deep-link button on the
+# frontend).
+
+from fastapi import UploadFile, File  # noqa: E402
+
+
+@api_router.get("/employees/departments")
+async def get_departments(_: dict = Depends(require_auth)):
+    """List distinct departments with headcounts (drives the tab's dropdown)."""
+    return {"items": await list_departments(db)}
+
+
+@api_router.get("/employees")
+async def get_employees(department: str | None = None,
+                        _: dict = Depends(require_auth)):
+    """Return employees, optionally filtered by department (case-sensitive
+    match on the value the departments endpoint returns)."""
+    items = await list_employees(db, department)
+    return {"items": items, "count": len(items)}
+
+
+@api_router.post("/employees/import")
+async def import_employees(file: UploadFile = File(...),
+                           _: dict = Depends(require_auth)):
+    """Replace the entire roster from an uploaded .xlsx file.
+
+    The upload MUST contain at least the columns `Employee Name`, `Email`
+    and `Department`. Extra columns are ignored. On success every existing
+    row is dropped and re-inserted from the file in a single transaction."""
+    filename = (file.filename or "").lower()
+    if not filename.endswith(".xlsx"):
+        raise HTTPException(status_code=415, detail="Please upload an .xlsx file.")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds 5 MB limit.")
+    try:
+        rows = parse_employees_xlsx(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        inserted = await replace_all_employees(db, rows)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "inserted": inserted}
+
+
+# ---------------------------------------------------------------------------
 # Document generation history
 # ---------------------------------------------------------------------------
 # Each successful PDF generation is persisted in MongoDB so HR can later list
@@ -776,6 +836,10 @@ async def _on_startup():
     # Helpful indexes for the auth collections
     await db.users.create_index("created_at")
     await db.login_attempts.create_index("locked_until")
+    # One-shot roster seed for the Notification Email compose helper.
+    seeded_employees = await bootstrap_employees_if_empty(db)
+    if seeded_employees:
+        logger.info("Employees seeded (%d rows).", seeded_employees)
     logger.info("Auth ready (indexes ensured).")
 
 

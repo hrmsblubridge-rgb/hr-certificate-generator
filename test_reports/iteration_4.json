@@ -1,0 +1,82 @@
+{
+  "summary": "End-to-end testing of the new Notification Email compose helper. Backend: 15/15 pytest cases passed (auth-gating on all 3 endpoints, CSRF-required on POST, departments count = 45/5/2 for Research Unit / Support Staff / Business & Product, employees list total = 52 with correct fields (name/email/department/team/designation), unknown-dept -> empty, import replaces roster with inserted=52, wrong-extension=415, empty=400, oversize=413, invalid xlsx bytes = 400/500). Frontend: all 11 spec bullets verified — login → notif-email menu tab → view renders → defaults hr@blubridge.com / manoj@blubridge.com, praveen@blubridge.com → dept selector loads roster with 45 checkboxes auto-checked → count '45 of 45 selected' → toggle-off updates count and removes from BCC textarea → select-all/clear works → Gmail deep-link starts with https://mail.google.com/mail/?view=cm and contains url-encoded to/cc/bcc/su/body params → disabled-gates (pointer-events-none + cursor-not-allowed) present on both buttons when 0 recipients selected, cleared when ≥1 → hidden file input triggered by label → seed .xlsx re-upload shows 'Roster replaced — 52 employees imported.' banner.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Notification Email - Department <select>",
+        "issues": [
+          "React hydration/console warning: '<span> cannot be a child of <option>'. This is caused by the runtime instrumentation wrapper inserting a <span style={display:contents}> around the option label ({d.name} ({d.count})). It's a devtool/instrumentation artifact rather than a source-code bug (the source just renders text). Non-blocking but noisy in the console."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_notif_email.py",
+    "/app/test_reports/pytest/notif_email_results.xml"
+  ],
+  "tests_executed": {
+    "backend_pytest_15_of_15_passed": [
+      "TestAuthGating::test_departments_requires_auth (401 without cookies)",
+      "TestAuthGating::test_employees_requires_auth (401 without cookies)",
+      "TestAuthGating::test_import_requires_auth (401 without cookies)",
+      "TestAuthGating::test_import_without_csrf_returns_403 (cookies present, X-CSRF-Token missing -> 403)",
+      "TestDepartments::test_departments_shape_and_counts — Research Unit=45, Support Staff=5, Business & Product=2, total>=52",
+      "TestEmployees::test_employees_all — count>=52, every row has name/email/department/team/designation, no _id leaked",
+      "TestEmployees::test_employees_filtered_research_unit — 45 employees, all with department=='Research Unit'",
+      "TestEmployees::test_employees_filtered_support_staff — 5 employees",
+      "TestEmployees::test_employees_filtered_business_product — 2 employees",
+      "TestEmployees::test_employees_unknown_department_empty — 0 items, count=0",
+      "TestImport::test_import_replaces_roster — POST /api/employees/import with employees_seed.xlsx returns {ok:true, inserted:52}, subsequent GET /employees confirms count=52 persisted",
+      "TestImport::test_import_wrong_extension_returns_415 — .csv upload -> 415",
+      "TestImport::test_import_empty_file_returns_400 — 0-byte .xlsx -> 400",
+      "TestImport::test_import_oversize_returns_413 — 5MB+10 -> 413",
+      "TestImport::test_import_invalid_xlsx_returns_400 — random bytes with .xlsx extension (accepted 400/422/500; observed 400 after backend guards the ValueError)"
+    ],
+    "frontend_playwright_passed": [
+      "Login admin/pass123 -> menu visible",
+      "Click menu-notif-email -> notification-email-view renders",
+      "notif-from default = 'hr@blubridge.com' (editable)",
+      "notif-cc default = 'manoj@blubridge.com, praveen@blubridge.com' (editable)",
+      "0-recipients state: notif-open-gmail and notif-open-mailto both have pointer-events-none AND cursor-not-allowed classes",
+      "Selecting Research Unit loads 45 employees; each row has notif-cb-<email> checkbox pre-checked",
+      "notif-selected-count reads '45 of 45 selected'",
+      "notif-bcc textarea contains 45 comma-separated emails",
+      "Unchecking rama.sukanya@blubridge.com -> count becomes '44 of 45 selected' AND email removed from notif-bcc",
+      "notif-select-none -> '0 of 45 selected'; notif-select-all -> '45 of 45 selected'",
+      "With subject+body typed, notif-open-gmail.href starts with 'https://mail.google.com/mail/?view=cm&fs=1' and contains url-encoded to=, cc=, bcc=, su=, body= params (verified 1595-char href)",
+      "notif-open-gmail no longer has pointer-events-none / cursor-not-allowed when recipients > 0",
+      "notif-upload-input (hidden file input) exists; setting files to /app/backend/data/employees_seed.xlsx triggers upload; notif-import-msg shows 'Roster replaced — 52 employees imported.' with emerald (ok) styling"
+    ]
+  },
+  "action_items": [
+    "None blocking. Consider addressing the React console warning by fixing the runtime instrumentation wrapper OR moving '{d.name} ({d.count})' into a single text expression (already the case in source, so this looks purely tool-side).",
+    "OPTIONAL: The frontend surfaces backend upload errors as just the raw 'detail' string (e.g. 'HTTP 500'). Consider mapping known status codes (413/415/400) to more human-friendly messages in NotificationEmailView.onImport catch branch.",
+    "OPTIONAL: The `email` uniqueness constraint means uploading an xlsx with duplicate emails would fail the bulk insert mid-flight after delete_many wiped the collection — leaving the roster in a partial state. Consider (a) deduping in parse_employees_xlsx, or (b) using a transaction / temp collection swap for atomicity."
+  ],
+  "critical_code_review_comments": [
+    "BUG FIXED: /app/backend/employees.py::replace_all_employees was creating a NON-unique index on `email` while bootstrap_employees_if_empty created a UNIQUE index. Same index name, different options -> MongoDB IndexKeySpecsConflict -> 500 on every roster re-upload. Fixed by matching unique=True in both call sites. Root cause: the same index needs the same options everywhere; consider factoring _ensure_indexes(db) into a single helper called by both bootstrap and replace to prevent drift.",
+    "The employees module writes email lower-cased on parse (good) but does NOT dedupe within the same file, so an .xlsx with two rows sharing the same email will now (post-fix) raise BulkWriteError after the collection has already been wiped. Add `rows = list({r['email']: r for r in rows}.values())` in replace_all_employees or parse_employees_xlsx to dedupe.",
+    "server.py::import_employees does not catch pymongo.errors.BulkWriteError or DuplicateKeyError. A user uploading a file with duplicate emails would today receive a raw 500. Wrap `await replace_all_employees(...)` in try/except and translate to 409.",
+    "NotificationEmailView.js hard-codes reading the CSRF cookie via a regex: `(document.cookie.match(/hrcert_csrf=([^;]+)/) || [])[1]`. All other state-changing calls use apiFetch which likely already adds the header. Consider routing this multipart POST through the same helper (or a variant that skips Content-Type auto-setting) rather than duplicating the CSRF-cookie parsing logic.",
+    "employees.py::list_employees uses `department.lower() != 'all'` to allow an 'all' sentinel, but the frontend never sends 'all' (it sends empty string -> no query param). Either wire the FE 'All' shortcut, or drop the dead branch.",
+    "server.py is now ~890 lines — well past the 700-line guideline. Splitting into routers/{auth,certificate,offer,offer_email,offer_appointment,ack,employees,history}.py is overdue; each is self-contained.",
+    "Notification Email textarea `notif-bcc` is readOnly but is still an <textarea>; a keyboard user tabbing into it can't tell it's read-only from a screen reader (no aria-readonly). Add aria-readonly=\"true\" or convert to a <div role=\"textbox\">."
+  ],
+  "updated_files": [
+    "/app/backend/employees.py (fixed IndexKeySpecsConflict — replace_all_employees now matches bootstrap's unique=True on email)",
+    "/app/backend/tests/test_notif_email.py (new — 15 pytest cases: auth-gating x4, departments x1, employees x5, import x5)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% (13/13 spec bullets)"},
+  "test_credentials": "admin / pass123 (verified via /api/auth/login -> 200).",
+  "seed_data_creation": "None. The roster was re-imported during testing back to the seeded state (52 rows across Research Unit=45 / Support Staff=5 / Business & Product=2) using /app/backend/data/employees_seed.xlsx. No test-specific data left behind.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin password = pass123. The Notification Email tab is at data-testid='menu-notif-email' and view at data-testid='notification-email-view'. The BCC textarea (notif-bcc) is READ-ONLY by design — never fill() it in Playwright; instead toggle checkboxes to change recipients. Gmail URL uses view=cm&fs=1 and encodes commas as %2C in cc/bcc lists. Roster upload calls fetch() directly with X-CSRF-Token parsed from document.cookie (not the apiFetch helper). Backend endpoints: /api/employees/departments, /api/employees?department=X, /api/employees/import (multipart 'file'). One bug was fixed this iteration: replace_all_employees now creates a UNIQUE email index to match the bootstrap. If you re-test, keep in mind uploading a file with duplicate emails will still 500 (bulk write error) — see action_items.",
+  "rca of the issue": "BUG (fixed): POST /api/employees/import returned 500 on every re-upload. Root cause: MongoDB rejects create_index(name=X, options=Y1) when an index with the same auto-generated name X already exists with different options Y2. bootstrap_employees_if_empty (employees.py:122) created `email_1` with unique=True on first boot, but replace_all_employees (employees.py:135) tried to create the same-named index with unique=False. Mongo error: IndexKeySpecsConflict, code 86, propagated as 500. Reproduction: POST /api/employees/import <seed.xlsx>  →  500 Internal Server Error; check backend logs for 'existing index has the same name'. Fix: change employees.py:135 to `await db.employees.create_index('email', unique=True)`. Verified: after fix, /api/employees/import returns 200 {'ok': true, 'inserted': 52} and the FE banner shows 'Roster replaced — 52 employees imported.'."
+}
