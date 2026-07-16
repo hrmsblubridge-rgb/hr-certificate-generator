@@ -128,6 +128,13 @@ async def replace_all_employees(db, rows: list[dict]) -> int:
     """Wholesale replace the roster with the given rows. Returns inserted count."""
     if not rows:
         raise ValueError("No valid employee rows found in the uploaded file.")
+    # Dedupe by email (case-insensitive) so a spreadsheet with the same
+    # person listed twice doesn't kill the bulk insert mid-flight after we've
+    # already wiped the collection.
+    dedup: dict[str, dict] = {}
+    for r in rows:
+        dedup[r["email"].lower()] = r
+    rows = list(dedup.values())
     await db.employees.delete_many({})
     await db.employees.insert_many(rows)
     # Ensure indexes exist even after a full rebuild. `email` MUST be unique
