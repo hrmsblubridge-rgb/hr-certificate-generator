@@ -36,8 +36,15 @@ export default function RichTextEditor({ value = "", onChange, resetKey = 0, tes
   }, [onChange]);
 
   const insertLink = useCallback(() => {
-    const url = window.prompt("Enter URL (https://…)");
-    if (!url) return;
+    const raw = window.prompt("Enter URL (https://…)");
+    if (!raw) return;
+    const url = raw.trim();
+    // Defence in depth — only permit http(s)/mailto/tel schemes. execCommand
+    // itself blocks `javascript:` in modern browsers, but belt-and-braces.
+    if (!/^(https?:|mailto:|tel:)/i.test(url)) {
+      window.alert("Only https://, http://, mailto: or tel: links are allowed.");
+      return;
+    }
     exec("createLink", url);
   }, [exec]);
 

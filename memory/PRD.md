@@ -41,29 +41,24 @@ spacing, margins, header, footer, logo, signature, layout).
 - [x] Output is a downloadable PDF preserving original appearance
 
 ## Implemented
-- **v21 (2026-07-16)** **Notification Email tab (compose-only).** New tab
-  lets HR assemble a departmental notification without the app sending
-  anything itself. Roster is seeded once from `backend/data/employees_seed.xlsx`
-  (52 rows across 3 departments: Research Unit 45, Support Staff 5,
-  Business & Product 2) into MongoDB `employees` collection.  HR can:
-  pick a department dropdown, check/uncheck individual employees,
-  edit the From address (default `hr@blubridge.com`) and CC owners
-  (default `manoj@blubridge.com, praveen@blubridge.com`), type subject
-  + body, then either copy any of the fields with per-field Copy buttons
-  or click "Open in Gmail" — a `https://mail.google.com/mail/?view=cm...`
-  deep link with `to`, `cc`, `bcc`, `su`, `body` params. A `mailto:`
-  fallback opens the OS default mail client. Roster is replaceable via
-  an .xlsx re-upload button (`POST /api/employees/import`, guards:
-  wrong-ext=415, empty=400, >5MB=413, no valid rows=400).
-  New backend module `backend/employees.py`; 3 new endpoints:
-  `GET /api/employees/departments`, `GET /api/employees[?department=]`,
-  `POST /api/employees/import`. Startup hook seeds if collection empty.
-  Testing agent: **15/15 backend pytest + 13/13 frontend Playwright pass**.
-  One bug caught & fixed in-agent: `replace_all_employees` re-declared
-  the `email` index with `unique=False` conflicting with the bootstrap's
-  `unique=True` → `IndexKeySpecsConflict` 500 on every re-upload. Fix:
-  match `unique=True` in both call sites + dedupe rows by lowercase email
-  in-parse to prevent partial-state after bulk-insert failure.
+- **v22 (2026-07-16)** **Notification Email pivoted to true 1-click send.**
+  Per user directive ("No BCC option... they don't see others... HTML editor...
+  One click Send button from here app itself"): removed BCC entirely, added a
+  contentEditable **HTML rich-text editor** (bold/italic/underline/lists/link/
+  undo-redo — `/frontend/src/components/RichTextEditor.js`), and wired a
+  direct **SendGrid batch dispatch** through a new backend endpoint
+  `POST /api/notification/send`. The app now sends **one individual email per
+  recipient** (each sees only themselves in To). Owners are copied on every
+  message via the editable CC field. Personalisation via `{name}` / `{{name}}`
+  placeholder. Confirm modal before dispatch. Full success clears the form.
+  History filter added (`type=notification`). Testing agent: **15/15 backend
+  pytest + 15/15 frontend Playwright pass**. Small hardening: link inserter
+  now whitelists http(s)/mailto/tel schemes only.
+
+- **v21 (2026-07-16)** (superseded compose-only helper — replaced by v22.
+  Originally: employee roster seeded from `backend/data/employees_seed.xlsx`,
+  compose-only tab with Copy buttons + Gmail deep-link. Roster infra kept
+  in v22; UI/UX replaced with the direct-send flow.)
 
 - **v17 (2026-02-26)** New tab **"Offer of Appointment"** generates the personalised offer letter as **DOCX + PDF** by substituting dynamic values directly into the operator-supplied source `templates/offer_of_appointment_source.docx` (244 KB, 514 paragraphs, 4 tables) — **no re-layout**: fonts, sizes, indentation, tabs, page breaks, table cell styling all preserved exactly from the source. Substitution is run-aware (per-mapping per-run with cross-run fallback), so character-level formatting (bold/italic) survives wherever the source applied it. The Annexure-A compensation table is rescaled proportionally per operator-entered CTC; the Annexure-B tier-bands reference table is explicitly NOT touched (only the Annexure-A header `TIER:` cell is updated with the auto-derived tier). PDF output via LibreOffice 7.4 headless (`subprocess.run([libreoffice, --headless, --convert-to pdf, ...])`) for byte-faithful Word-quality rendering. New backend module `offer_appointment.py` reuses tier/CTC math from `offer_letter_email.py`. Two endpoints: `POST /api/offer-appointment/docx` and `POST /api/offer-appointment/pdf?inline=true|false` (inline=true returns `Content-Disposition: inline` so the frontend can embed the PDF in a preview iframe). Frontend `views/OfferOfAppointmentView.js` — same input form as the Email tab, but the modal renders the actual rendered PDF in an iframe with two action buttons: Download DOCX + Download PDF. Filenames follow `Offer_of_Appointment_Mr_Vijayan_K.{docx,pdf}`. ISO `<input type="date">` values are converted to the source-doc's word format `08-June-2026` before posting. Verified end-to-end via curl: 13/13 substitution + structure checks pass (tier-bands reference table intact, CTC proportional scaling correct, all 8 name occurrences updated, joining-date vs letter-date correctly disambiguated). Deployment note: **LibreOffice must be installed on the production host** (`apt-get install libreoffice-core libreoffice-writer --no-install-recommends`, ~400 MB). For Render, add this to the Build Command before `pip install` (see updated render.yaml note below).
 - **v16 (2026-02-25)** New tab **"Offer Letter (Email)"** generates the full 9-page Blubridge offer letter HTML... [previous entry retained] (main body + Annexures A–I) from a form-driven payload, returning a complete self-contained HTML doc (embedded CSS, ~87 KB) for in-app iframe preview + Open-in-new-tab + Download HTML. Backend: `/app/backend/offer_letter_email.py` (renderer + `scale_compensation` proportional-CTC scaling + Indian number formatting + Indian number-to-words + tier auto-derivation per Annexure-B bands), `/app/backend/templates/offer_letter_source.htm` (verbatim template downloaded from user-supplied artifact, 86 KB), new endpoint `POST /api/offer-email/preview` with `OfferEmailRequest(Literal title, mode='standard'|'customized', ctc_yearly:int gt=0)`. `customized` mode intentionally returns 400 with 'next iteration' message; hook documented at module bottom. History persistence reuses the `_save_history` infra; `/api/history/{id}/download` now infers `text/html` vs `application/pdf` from filename suffix. Frontend: new `views/OfferLetterEmailView.js` matching the user's screenshot (Title/Name/Email/Phone/Date/Joining-Date/Ref Number with `CHN/2025/Res/1-` prefix label/Designation/Address-1-3 in left column; Standard/Customized radio + CTC + Preview Offer in right column) with a modal preview that renders the HTML in a sandboxed iframe. Testing agent: backend 9/9 pass (happy path 660k/1.5M/300k CTC tier derivation, customized→400, auth/CSRF/422 validation, history list+download content-type=text/html); frontend 11/12 pass (all 15 testids, options, submit gating, modal open/close, form-state preservation). One known issue: global app header overflows by ~29px on viewports <400px — pre-existing, not introduced by this feature.
