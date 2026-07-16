@@ -6,6 +6,7 @@ import {
 import { apiFetch, apiJSON, API } from "@/lib/api";
 
 const DEFAULT_FROM = "hr@blubridge.com";
+const DEFAULT_TO   = "";     // HR fills a primary visible recipient (or leaves blank)
 const DEFAULT_CC   = "manoj@blubridge.com, praveen@blubridge.com";
 
 function CopyButton({ text, label = "Copy", testid }) {
@@ -47,6 +48,7 @@ export default function NotificationEmailView() {
 
   // --- Compose state ---
   const [fromAddr, setFromAddr] = useState(DEFAULT_FROM);
+  const [toAddr, setToAddr]     = useState(DEFAULT_TO);
   const [ccAddr, setCcAddr]     = useState(DEFAULT_CC);
   const [customBcc, setCustomBcc] = useState("");   // free-text extra recipients
   const [subject, setSubject]   = useState("");
@@ -122,30 +124,36 @@ export default function NotificationEmailView() {
     setSelected(s);
   };
 
+  // The Gmail / mailto links need at least ONE addressable recipient (To or
+  // BCC). If HR only cares about BCC blast, `to` falls back to `fromAddr` so
+  // Gmail still opens (a URL with `bcc` but no `to` sometimes trips clients).
+  const hasRecipient = bccList.length > 0 || !!toAddr.trim();
+  const effectiveTo  = toAddr.trim() || fromAddr;
+
   // --- Gmail deep-link ---
   const gmailUrl = useMemo(() => {
-    if (!bccList.length) return "";
+    if (!hasRecipient) return "";
     const p = new URLSearchParams();
     p.set("view", "cm");
     p.set("fs", "1");
-    if (fromAddr) p.set("to", fromAddr);
-    if (ccAddr)   p.set("cc", ccAddr);
-    p.set("bcc", bccString);
-    if (subject)  p.set("su", subject);
-    if (body)     p.set("body", body);
+    if (effectiveTo) p.set("to", effectiveTo);
+    if (ccAddr)      p.set("cc", ccAddr);
+    if (bccString)   p.set("bcc", bccString);
+    if (subject)     p.set("su", subject);
+    if (body)        p.set("body", body);
     return `https://mail.google.com/mail/?${p.toString()}`;
-  }, [bccList.length, fromAddr, ccAddr, bccString, subject, body]);
+  }, [hasRecipient, effectiveTo, ccAddr, bccString, subject, body]);
 
   // --- mailto: fallback (opens default mail client) ---
   const mailtoUrl = useMemo(() => {
-    if (!bccList.length) return "";
+    if (!hasRecipient) return "";
     const p = new URLSearchParams();
-    if (ccAddr)  p.set("cc",  ccAddr);
-    p.set("bcc", bccString);
-    if (subject) p.set("subject", subject);
-    if (body)    p.set("body", body);
-    return `mailto:${encodeURIComponent(fromAddr)}?${p.toString()}`;
-  }, [bccList.length, fromAddr, ccAddr, bccString, subject, body]);
+    if (ccAddr)    p.set("cc",  ccAddr);
+    if (bccString) p.set("bcc", bccString);
+    if (subject)   p.set("subject", subject);
+    if (body)      p.set("body", body);
+    return `mailto:${encodeURIComponent(effectiveTo)}?${p.toString()}`;
+  }, [hasRecipient, effectiveTo, ccAddr, bccString, subject, body]);
 
   // --- Roster upload ---
   const onImport = async (ev) => {
@@ -331,7 +339,7 @@ export default function NotificationEmailView() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-semibold text-[#1a1a1f]/70 uppercase tracking-wide">
-                From / To (your address)
+                From (your address)
               </label>
               <CopyButton text={fromAddr} testid="notif-copy-from" />
             </div>
@@ -340,10 +348,35 @@ export default function NotificationEmailView() {
               value={fromAddr}
               onChange={(e) => setFromAddr(e.target.value)}
               data-testid="notif-from"
+              placeholder="hr@blubridge.com"
               className="w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#232369]/60 focus:ring-2 focus:ring-[#232369]/15"
             />
             <p className="mt-1 text-[11px] text-[#1a1a1f]/50">
-              Put your own email here — Gmail will reply-to yourself when the BCC list opens.
+              This is the sender identity. Gmail sends from your signed-in
+              account regardless — the value is only echoed into the &quot;To&quot; if
+              you leave that blank.
+            </p>
+          </div>
+
+          {/* To */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-[#1a1a1f]/70 uppercase tracking-wide">
+                To
+              </label>
+              <CopyButton text={toAddr} testid="notif-copy-to" />
+            </div>
+            <input
+              type="text"
+              value={toAddr}
+              onChange={(e) => setToAddr(e.target.value)}
+              data-testid="notif-to"
+              placeholder="employee@gmail.com  (optional — leave blank for BCC-only blast)"
+              className="w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#232369]/60 focus:ring-2 focus:ring-[#232369]/15"
+            />
+            <p className="mt-1 text-[11px] text-[#1a1a1f]/50">
+              Visible primary recipient. Leave blank if you only want to BCC
+              a department — Gmail will silently reuse your From address here.
             </p>
           </div>
 
