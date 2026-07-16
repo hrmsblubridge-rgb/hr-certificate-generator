@@ -48,6 +48,7 @@ export default function NotificationEmailView() {
   // --- Compose state ---
   const [fromAddr, setFromAddr] = useState(DEFAULT_FROM);
   const [ccAddr, setCcAddr]     = useState(DEFAULT_CC);
+  const [customBcc, setCustomBcc] = useState("");   // free-text extra recipients
   const [subject, setSubject]   = useState("");
   const [body, setBody]         = useState("");
 
@@ -87,11 +88,33 @@ export default function NotificationEmailView() {
   }, [selectedDept, loadEmployees]);
 
   // --- Derived recipient string ---
+  // Split custom-BCC on commas / newlines / semicolons, trim, drop empties &
+  // anything without an "@", lowercase for a case-insensitive dedupe.
+  const customEmails = useMemo(() => {
+    return customBcc
+      .split(/[,\n;]+/)
+      .map((s) => s.trim())
+      .filter((s) => s && s.includes("@"));
+  }, [customBcc]);
+
   const bccList = useMemo(() => {
-    return employees.filter((e) => selected[e.email]).map((e) => e.email);
-  }, [employees, selected]);
+    const seen = new Set();
+    const out = [];
+    const rosterPicked = employees.filter((e) => selected[e.email]).map((e) => e.email);
+    for (const em of [...rosterPicked, ...customEmails]) {
+      const key = em.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(em);
+    }
+    return out;
+  }, [employees, selected, customEmails]);
   const bccString = bccList.join(", ");
-  const selectedCount = bccList.length;
+  const rosterSelectedCount = useMemo(
+    () => employees.filter((e) => selected[e.email]).length,
+    [employees, selected]
+  );
+  const totalCount = bccList.length;
 
   const toggleAll = (checked) => {
     const s = {};
@@ -235,7 +258,7 @@ export default function NotificationEmailView() {
             <div className="text-xs text-[#1a1a1f]/60 inline-flex items-center gap-1.5">
               <Users size={13} />
               <span data-testid="notif-selected-count">
-                {selectedCount} of {employees.length} selected
+                {rosterSelectedCount} of {employees.length} selected
               </span>
             </div>
             {employees.length > 0 && (
@@ -342,33 +365,51 @@ export default function NotificationEmailView() {
             />
           </div>
 
-          {/* BCC (generated) */}
+          {/* BCC (generated + custom) */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-semibold text-[#1a1a1f]/70 uppercase tracking-wide">
-                BCC — {selectedCount} recipient{selectedCount === 1 ? "" : "s"}
+                BCC — {totalCount} recipient{totalCount === 1 ? "" : "s"}
+                {customEmails.length > 0 && (
+                  <span className="ml-1.5 font-normal text-[#1a1a1f]/50 normal-case">
+                    ({rosterSelectedCount} roster + {customEmails.length} custom)
+                  </span>
+                )}
               </label>
               <div className="flex items-center gap-2">
                 <CopyButton text={bccString} label="Copy list" testid="notif-copy-bcc" />
                 {bccString && (
                   <button
                     type="button"
-                    onClick={() => toggleAll(false)}
+                    onClick={() => { toggleAll(false); setCustomBcc(""); }}
                     className="inline-flex items-center gap-1 text-[11px] text-[#1a1a1f]/60 hover:text-rose-600"
                     data-testid="notif-clear-bcc"
-                    title="Deselect all"
+                    title="Deselect all + clear custom emails"
                   >
                     <Trash2 size={11} /> Clear
                   </button>
                 )}
               </div>
             </div>
+
+            {/* Free-text custom-BCC input — add anyone outside the roster */}
+            <textarea
+              value={customBcc}
+              onChange={(e) => setCustomBcc(e.target.value)}
+              rows={2}
+              data-testid="notif-custom-bcc"
+              placeholder="Custom emails (comma, newline, or semicolon separated) — e.g. legal@blubridge.com, external@partner.com"
+              className="w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#232369]/60 focus:ring-2 focus:ring-[#232369]/15 resize-none mb-2"
+            />
+
+            {/* Read-only preview of the final merged BCC list */}
             <textarea
               readOnly
+              aria-readonly="true"
               value={bccString}
               rows={4}
               data-testid="notif-bcc"
-              placeholder="Select employees on the left…"
+              placeholder="Select employees on the left, or add custom emails above…"
               className="w-full rounded-md border border-[#1a1a1f]/15 bg-[#f6f4ef]/50 px-3 py-2 text-[12px] font-mono text-[#1a1a1f]/80 focus:outline-none resize-none break-all"
             />
           </div>
