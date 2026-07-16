@@ -6,16 +6,18 @@ import {
 import { apiFetch, apiJSON, apiBlob, API } from "@/lib/api";
 
 const TYPE_META = {
-  certificate: { label: "Internship Certificate", icon: FileText,      color: "#232369" },
-  offer:       { label: "Offer Letter",            icon: FileSignature, color: "#1e6f59" },
-  ack:         { label: "Acknowledgement",         icon: FileCheck,     color: "#7a4119" },
+  certificate:  { label: "Internship Certificate", icon: FileText,      color: "#232369" },
+  offer:        { label: "Offer Letter",            icon: FileSignature, color: "#1e6f59" },
+  ack:          { label: "Acknowledgement",         icon: FileCheck,     color: "#7a4119" },
+  notification: { label: "Notification Email",       icon: FileText,      color: "#3b3b6b" },
 };
 
 const FILTERS = [
-  { id: "",            label: "All documents"   },
-  { id: "certificate", label: "Certificates"    },
-  { id: "offer",       label: "Offer Letters"   },
-  { id: "ack",         label: "Acknowledgements"},
+  { id: "",             label: "All documents"    },
+  { id: "certificate",  label: "Certificates"     },
+  { id: "offer",        label: "Offer Letters"    },
+  { id: "ack",          label: "Acknowledgements" },
+  { id: "notification", label: "Notifications"    },
 ];
 
 function formatBytes(n) {
@@ -43,6 +45,8 @@ function formatSummary(type, summary) {
     return `Ref ${summary.ref_code} · ${summary.date} · ${summary.designation} · ₹${summary.salary_amount}/-`;
   if (type === "ack")
     return `${summary.date} · ${summary.marksheet_type} Mark Sheet`;
+  if (type === "notification")
+    return `${summary.subject || "(no subject)"} · ${summary.sent || 0}/${summary.total || 0} sent${summary.failed ? ` · ${summary.failed} failed` : ""}`;
   return JSON.stringify(summary);
 }
 

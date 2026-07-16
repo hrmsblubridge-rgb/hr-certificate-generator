@@ -12,7 +12,7 @@ import os
 from typing import Optional
 
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+from sendgrid.helpers.mail import Mail, Email, To, Cc, Content
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,13 @@ def send_html_email(
     subject: str,
     html_body: str,
     reply_to: Optional[str] = None,
+    cc: Optional[list[str]] = None,
 ) -> str:
     """Send `html_body` to `to_email` via SendGrid. Returns the SendGrid
-    `x-message-id` header on success, raises `EmailError` on any failure."""
+    `x-message-id` header on success, raises `EmailError` on any failure.
+
+    `cc` is a list of additional visible recipients (owners/managers) copied
+    on every message. Empty / None means no CC."""
 
     api_key = os.environ.get("SENDGRID_API_KEY")
     sender  = os.environ.get("SENDER_EMAIL")
@@ -53,6 +57,12 @@ def send_html_email(
         subject=subject,
         html_content=Content("text/html", html_body),
     )
+    if cc:
+        # SendGrid v6 SDK — add_cc supports individual Cc() objects only.
+        for addr in cc:
+            addr = (addr or "").strip()
+            if addr and "@" in addr and addr.lower() != to_email.lower():
+                message.add_cc(Cc(addr))
     if reply_to:
         message.reply_to = Email(reply_to)
 

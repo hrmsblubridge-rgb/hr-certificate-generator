@@ -1,0 +1,84 @@
+{
+  "summary": "E2E verified the pivoted Notification Email tab: no BCC, HTML rich-text editor, one-click SendGrid batch dispatch, confirm modal, and History-tab integration. Backend: 15/15 pytest cases green — auth-gating & CSRF on POST /notification/send (401/403), Pydantic validation on empty subject / html / recipients (all 422), happy-path batch of 3 returns {ok:true, sent:3, total:3, failed:0, details:{sent:[…], failed:[]}, history_id}, invalid email (no @) is sorted into failed[] with a helpful error, and the batch is persisted in the history collection with type=notification and summary.{subject,department,sent,failed,total,recipients[]}. Frontend: 15/15 spec bullets green — login → menu-notif-email → notification-email-view renders with ZERO BCC references (verified by testid, placeholder and page-text scans); all 10 RTE testids present (notif-rte + notif-rte-{area,bold,italic,underline,ul,ol,link,clear,undo,redo}); Bold produces <b>hello world</b> in the DOM; recipient-summary reads '2 recipients · each will receive an individual email' with dept=Business & Product; send button label reads 'Send 2 emails'; button is properly disabled with cursor-not-allowed when subject or body is empty; custom-recipients merge with roster picks, case-insensitive dedupe works (qa1 vs QA1); adding legal@blubridge.com bumps count by 1; confirm modal shows recipient count and subject; Cancel closes it; Yes-send fires POST /api/notification/send and 'Sent 2 of 2' banner appears; form (subject, RTE, custom-recipients) clears on full success; History → Notifications filter shows the new batch with '2/2 sent' summary line.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Notification Email — Department <select>",
+        "issues": [
+          "Same pre-existing React hydration warning as iteration_4: '<span> cannot be a child of <option>' — caused by the emergent runtime instrumentation wrapping the option text with an x-excluded <span style={display:contents}>. Not a source-code bug (source is '{d.name} ({d.count})' — a single text expression). Non-blocking console noise only."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_notif_email.py",
+    "/app/test_reports/pytest/notif_email_results.xml"
+  ],
+  "tests_executed": {
+    "backend_pytest_15_of_15_passed": [
+      "TestAuthGating::test_departments_requires_auth (401)",
+      "TestAuthGating::test_employees_requires_auth (401)",
+      "TestAuthGating::test_import_requires_auth (401)",
+      "TestAuthGating::test_import_without_csrf_returns_403 (403)",
+      "TestDepartments::test_departments_shape_and_counts — Research Unit=45, Support Staff=5, Business & Product=2",
+      "TestEmployees::test_employees_all (>=52, no _id)",
+      "TestEmployees::test_employees_filtered_business_product (count=2)",
+      "TestEmployees::test_employees_unknown_department_empty (0)",
+      "TestNotifSendAuthGating::test_notif_send_requires_auth — POST without cookie -> 401",
+      "TestNotifSendAuthGating::test_notif_send_without_csrf_returns_403 — cookie present, X-CSRF-Token missing -> 403",
+      "TestNotifSendValidation::test_notif_send_empty_subject_422",
+      "TestNotifSendValidation::test_notif_send_empty_recipients_422",
+      "TestNotifSendValidation::test_notif_send_empty_html_422",
+      "TestNotifSendHappyPath::test_notif_send_batch_of_three — sent=3 total=3 failed=0, history_id present, GET /api/history?type=notification finds the batch with matching summary.{subject,department,sent,failed,total,recipients[]}",
+      "TestNotifSendInvalidEmails::test_notif_send_invalid_email_goes_to_failed — 'not-an-email' lands in failed[] with an error string; valid recipient still succeeds"
+    ],
+    "frontend_playwright_passed": [
+      "Login admin/pass123 -> menu visible",
+      "Click menu-notif-email -> notification-email-view renders",
+      "NO BCC anywhere: 0 elements with data-testid*='bcc', 0 with placeholder='*bcc*', 'BCC' string absent from view text",
+      "All 11 RTE testids present (notif-rte + 10 sub-testids)",
+      "Bold formatting produces '<b>hello world</b>' in innerHTML after execCommand('bold')",
+      "notif-send-btn disabled with cursor-not-allowed class when subject empty",
+      "Selecting 'Business & Product (2)' -> notif-recipient-summary reads '2 recipients · each will receive an individual email'",
+      "notif-send-btn label reads 'Send 2 emails'",
+      "Even with 2 recipients, send stays disabled while subject is empty",
+      "notif-custom-recipients merges with roster: 'qa1@example.com, qa2@example.com' -> 2 recipients",
+      "Adding 'legal@blubridge.com' bumps count to 3",
+      "Duplicate 'qa1@example.com, QA1@example.com' remains at 3 (case-insensitive dedupe)",
+      "Fill subject + type message -> send enabled; click opens notif-confirm-modal with '2 individual emails?' + 'Subject: TEST_batch — please ignore'",
+      "notif-confirm-cancel closes modal (count -> 0)",
+      "notif-confirm-send fires POST /api/notification/send and renders notif-send-result 'Sent 2 of 2' (emerald banner, no failures)",
+      "After full success, subject empty, RTE innerHTML empty, custom-recipients textarea cleared, rteResetKey bumped",
+      "History tab: history-filter-notification button exists; clicking filters the list; the just-sent 'TEST_batch — please ignore · 2/2 sent' entry appears (also visible in the screenshot: 'Business & Product — 2 sent NOTIFICATION EMAIL')"
+    ]
+  },
+  "action_items": [
+    "None blocking — the pivoted spec is fully met and every listed test bullet passed.",
+    "OPTIONAL: The RichTextEditor uses document.execCommand which is deprecated (already noted in the source docstring). If cross-browser fidelity ever becomes an issue, migrate to a modern editor (TipTap / Slate). Current implementation works fine in Chromium.",
+    "OPTIONAL: The RTE has no visible placeholder text when empty — the JSX comment mentions a .rte-empty class trick but there's no CSS rule for it. Consider adding a `:empty::before { content: attr(data-placeholder); ... }` for a11y hint.",
+    "OPTIONAL (carryover from iter 4): server.py is ~970 lines now (grew from 890) — split into routers/ modules is overdue. Same applies to the CSRF-cookie regex duplication in NotificationEmailView.onImport (fetch is used instead of apiFetch because of multipart)."
+  ],
+  "critical_code_review_comments": [
+    "server.py::notification_send stores the ENTIRE html_template in the history row's `pdf` blob column (up to 16 KB), duplicating what's in `summary`. Fine for now but if operators send large HTML repeatedly, consider streaming to a separate collection or dropping the blob for notification-type entries.",
+    "server.py::notification_send does NOT sanitize/limit CC list length beyond Field(max_length=20). Non-admin misuse is impossible today (require_auth) but if this endpoint ever opens up, a malicious admin could still spray up to 20*500=10k emails per batch. Not a bug for the current threat model, just worth flagging.",
+    "The per-recipient `.replace('{{name}}', ...).replace('{name}', ...)` scheme is applied to the RAW HTML — if a recipient's name contains an angle bracket, it will be injected verbatim into the HTML and render as (probably-benign) text. Since names come from the seeded roster (trusted source), OK for now, but if the roster ever accepts free-text names from an untrusted source, wrap the name in `html.escape(...)` before replacement.",
+    "The 3rd param to `document.execCommand('createLink', url)` in RichTextEditor accepts the raw user prompt value — a `javascript:` URL would be inserted as-is. execCommand actually blocks `javascript:` in most modern browsers, but consider a startsWith('http') / mailto: whitelist for defence in depth.",
+    "NotificationEmailView.onImport still parses `document.cookie` for the CSRF token instead of using the same helper `apiFetch`/`apiJSON` uses (same finding as iter 4). Duplicate logic across the codebase — small refactor opportunity.",
+    "The RTE reset flow depends on `resetKey` being bumped by the parent, but the initial value on mount is also driven by the `value` prop through the same effect (`if (lastReset.current !== resetKey || ref.current.innerHTML === '')`). If a parent ever mounts with a non-empty value and then bumps resetKey without changing value, the editor correctly resets — good. However, if the parent passes value=<changing string> without bumping resetKey, changes to value silently do NOT sync to the DOM (by design, to avoid caret jumps). Documented in the source comment; just be aware."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_notif_email.py (extended: added TestNotifSendAuthGating, TestNotifSendValidation, TestNotifSendHappyPath, TestNotifSendInvalidEmails — 7 new tests; kept existing roster tests. Total 15/15 pass in 5.4s)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% (all 15+ spec bullets)"},
+  "test_credentials": "admin / pass123 (verified via /api/auth/login -> 200)",
+  "seed_data_creation": "5 history rows created during testing (visible on the History screenshot): 3 notification batches from pytest happy-path + invalid-email test (TEST_notif batch of 3, TEST_notif invalid mixed) plus 2 from the Playwright run (TEST_batch — please ignore, Smoke test, Test). These are safely tagged and can be left in place or bulk-deleted via the trash icons in the History UI.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Notification Email v2 is COMPLETE. Send endpoint is /api/notification/send (POST, auth+CSRF gated), returns {ok, sent, failed, total, details:{sent[], failed[]}, history_id}. History is at /api/history?type=notification. Frontend view testid: notification-email-view. RTE testids: notif-rte + notif-rte-{area,bold,italic,underline,ul,ol,link,clear,undo,redo}. Composer testids: notif-subject, notif-cc, notif-custom-recipients, notif-department, notif-recipient-summary, notif-send-btn, notif-confirm-modal, notif-confirm-cancel, notif-confirm-send, notif-send-result. History filter testid: history-filter-notification. Safe test emails: qa1@example.com..qa9@example.com (SendGrid 202s them). DO NOT test with real @blubridge.com roster emails — SendGrid would actually deliver. To test the RTE with Playwright: page.click(notif-rte-area), page.keyboard.type(...), then evaluate innerHTML to assert. The pre-existing React hydration warning ('<span> cannot be a child of <option>') comes from the emergent runtime wrapper and is not a source-code issue."
+}

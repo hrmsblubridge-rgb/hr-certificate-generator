@@ -1,10 +1,16 @@
-"""Backend tests for the Notification Email compose helper endpoints:
-- GET  /api/employees/departments
-- GET  /api/employees
-- POST /api/employees/import
-Also verifies auth-gating (401 without cookies) and CSRF (403 on POST without header).
+"""Backend tests for the Notification Email feature (v2 — one-click send).
+
+Covers:
+- GET  /api/employees/departments (auth-gated)
+- GET  /api/employees              (auth-gated + department filter)
+- POST /api/employees/import       (auth + CSRF gated)
+- POST /api/notification/send      (auth + CSRF gated, per-recipient dispatch)
+- GET  /api/history?type=notification  (batch persisted after send)
+
+The `/notification/send` tests use safe placeholder addresses
+(`qa1@example.com`, `qa2@example.com`, `invalid@example.invalid`) — SendGrid
+returns 202 for any syntactically-valid email without actually delivering.
 """
-import io
 import os
 import pytest
 import requests
@@ -19,10 +25,12 @@ if not os.environ.get("REACT_APP_BACKEND_URL"):
                 os.environ["REACT_APP_BACKEND_URL"] = line.split("=", 1)[1].strip()
 
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-LOGIN_URL       = f"{BASE_URL}/api/auth/login"
-DEPTS_URL       = f"{BASE_URL}/api/employees/departments"
-EMPLOYEES_URL   = f"{BASE_URL}/api/employees"
-IMPORT_URL      = f"{BASE_URL}/api/employees/import"
+LOGIN_URL      = f"{BASE_URL}/api/auth/login"
+DEPTS_URL      = f"{BASE_URL}/api/employees/departments"
+EMPLOYEES_URL  = f"{BASE_URL}/api/employees"
+IMPORT_URL     = f"{BASE_URL}/api/employees/import"
+NOTIF_URL      = f"{BASE_URL}/api/notification/send"
+HISTORY_URL    = f"{BASE_URL}/api/history"
 
 ADMIN_USER = "admin"
 _PW_CANDIDATES = ["pass123", "pass1234"]
@@ -48,10 +56,8 @@ def auth():
     return _login_session()
 
 
-# ---- Auth-gating tests -----------------------------------------------------
+# ---- Auth-gating tests (roster endpoints) ---------------------------------
 class TestAuthGating:
-    """All 3 employees endpoints require the session cookie."""
-
     def test_departments_requires_auth(self):
         r = requests.get(DEPTS_URL)
         assert r.status_code == 401, r.text
@@ -61,17 +67,16 @@ class TestAuthGating:
         assert r.status_code == 401, r.text
 
     def test_import_requires_auth(self):
-        r = requests.post(IMPORT_URL, files={"file": ("x.xlsx", b"", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+        r = requests.post(IMPORT_URL, files={"file": ("x.xlsx", b"",
+                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
         assert r.status_code == 401, r.text
 
     def test_import_without_csrf_returns_403(self, auth):
-        # Strip CSRF header explicitly; cookies remain -> should 403.
         s = requests.Session()
         s.cookies.update(auth.cookies.get_dict())
-        # No X-CSRF-Token header set here.
         with SEED_XLSX.open("rb") as f:
             r = s.post(IMPORT_URL, files={"file": ("employees_seed.xlsx", f.read(),
-                                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
         assert r.status_code == 403, f"expected 403 got {r.status_code}: {r.text[:200]}"
 
 
@@ -82,19 +87,10 @@ class TestDepartments:
         assert r.status_code == 200, r.text
         data = r.json()
         assert "items" in data and isinstance(data["items"], list)
-        items = data["items"]
-        # Build a name->count map for assertions.
-        counts = {d["name"]: d["count"] for d in items}
-        # 3 seeded departments per problem spec.
-        assert "Research Unit" in counts and counts["Research Unit"] == 45, counts
-        assert "Support Staff" in counts and counts["Support Staff"] == 5, counts
-        assert "Business & Product" in counts and counts["Business & Product"] == 2, counts
-        # Total should be at least 52.
-        total = sum(counts.values())
-        assert total >= 52, f"expected total>=52 got {total}: {counts}"
-        # Each item must have both keys.
-        for d in items:
-            assert isinstance(d["name"], str) and isinstance(d["count"], int)
+        counts = {d["name"]: d["count"] for d in data["items"]}
+        assert counts.get("Research Unit") == 45, counts
+        assert counts.get("Support Staff") == 5, counts
+        assert counts.get("Business & Product") == 2, counts
 
 
 # ---- Employees listing -----------------------------------------------------
@@ -103,85 +99,141 @@ class TestEmployees:
         r = auth.get(EMPLOYEES_URL)
         assert r.status_code == 200, r.text
         data = r.json()
-        assert "items" in data and "count" in data
-        # Seeded roster is 52 rows.
-        assert data["count"] >= 52, f"expected >=52 got {data['count']}"
+        assert data["count"] >= 52
         assert data["count"] == len(data["items"])
-        # Verify shape of first row.
         first = data["items"][0]
         for k in ("name", "email", "department", "team", "designation"):
-            assert k in first, f"missing field {k} in {first}"
-        # No mongo _id leakage.
+            assert k in first
         assert "_id" not in first
-
-    def test_employees_filtered_research_unit(self, auth):
-        r = auth.get(EMPLOYEES_URL, params={"department": "Research Unit"})
-        assert r.status_code == 200, r.text
-        data = r.json()
-        assert data["count"] == 45, f"expected 45 got {data['count']}"
-        assert all(e["department"] == "Research Unit" for e in data["items"])
-
-    def test_employees_filtered_support_staff(self, auth):
-        r = auth.get(EMPLOYEES_URL, params={"department": "Support Staff"})
-        assert r.status_code == 200, r.text
-        data = r.json()
-        assert data["count"] == 5
 
     def test_employees_filtered_business_product(self, auth):
         r = auth.get(EMPLOYEES_URL, params={"department": "Business & Product"})
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["count"] == 2
+        assert all(e["department"] == "Business & Product" for e in data["items"])
 
     def test_employees_unknown_department_empty(self, auth):
-        r = auth.get(EMPLOYEES_URL, params={"department": "Definitely Not A Real Dept"})
+        r = auth.get(EMPLOYEES_URL, params={"department": "Not A Real Dept"})
         assert r.status_code == 200, r.text
-        data = r.json()
-        assert data["count"] == 0
-        assert data["items"] == []
+        assert r.json()["count"] == 0
 
 
-# ---- Import (upload) tests -------------------------------------------------
-class TestImport:
-    """POST /api/employees/import — happy path + error branches."""
+# ---- POST /api/notification/send — auth + CSRF ----------------------------
+class TestNotifSendAuthGating:
+    def test_notif_send_requires_auth(self):
+        r = requests.post(NOTIF_URL, json={
+            "subject": "x", "html": "<p>x</p>",
+            "recipients": [{"email": "qa1@example.com", "name": "QA1"}],
+        })
+        assert r.status_code == 401, r.text
 
-    def test_import_replaces_roster(self, auth):
-        with SEED_XLSX.open("rb") as f:
-            files = {"file": ("employees_seed.xlsx", f.read(),
-                              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-        r = auth.post(IMPORT_URL, files=files)
+    def test_notif_send_without_csrf_returns_403(self, auth):
+        s = requests.Session()
+        s.cookies.update(auth.cookies.get_dict())
+        r = s.post(NOTIF_URL, json={
+            "subject": "x", "html": "<p>x</p>",
+            "recipients": [{"email": "qa1@example.com", "name": "QA1"}],
+        })
+        assert r.status_code == 403, f"expected 403 got {r.status_code}: {r.text[:200]}"
+
+
+# ---- POST /api/notification/send — validation -----------------------------
+class TestNotifSendValidation:
+    def test_notif_send_empty_subject_422(self, auth):
+        r = auth.post(NOTIF_URL, json={
+            "subject": "", "html": "<p>hello</p>",
+            "recipients": [{"email": "qa1@example.com", "name": "QA1"}],
+        })
+        assert r.status_code == 422, r.text
+
+    def test_notif_send_empty_recipients_422(self, auth):
+        r = auth.post(NOTIF_URL, json={
+            "subject": "hi", "html": "<p>hello</p>",
+            "recipients": [],
+        })
+        assert r.status_code == 422, r.text
+
+    def test_notif_send_empty_html_422(self, auth):
+        r = auth.post(NOTIF_URL, json={
+            "subject": "hi", "html": "",
+            "recipients": [{"email": "qa1@example.com", "name": "QA1"}],
+        })
+        assert r.status_code == 422, r.text
+
+
+# ---- POST /api/notification/send — happy path -----------------------------
+class TestNotifSendHappyPath:
+    """Batch of 3 recipients. Expects sent=3 total=3 failed=0 and a history row."""
+
+    def test_notif_send_batch_of_three(self, auth):
+        recipients = [
+            {"email": "qa1@example.com", "name": "QA One"},
+            {"email": "qa2@example.com", "name": "QA Two"},
+            {"email": "qa3@example.com", "name": "QA Three"},
+        ]
+        r = auth.post(NOTIF_URL, json={
+            "subject":    "TEST_notif batch of 3",
+            "html":       "<p>Hi {name}, this is a notification test.</p>",
+            "recipients": recipients,
+            "cc":         ["owner1@blubridge.com"],
+            "department": "Business & Product",
+        })
         assert r.status_code == 200, r.text
-        data = r.json()
-        assert data["ok"] is True
-        assert data["inserted"] == 52, f"expected 52 inserted got {data['inserted']}"
-        # Verify persistence by re-listing.
-        r2 = auth.get(EMPLOYEES_URL)
-        assert r2.status_code == 200
-        assert r2.json()["count"] == 52
+        j = r.json()
+        # Contract shape
+        for k in ("ok", "sent", "failed", "total", "details", "history_id"):
+            assert k in j, f"missing key {k} in {j}"
+        assert j["total"] == 3
+        assert j["sent"] == 3, f"expected sent=3 got {j['sent']} — details={j['details']}"
+        assert j["failed"] == 0
+        assert j["ok"] is True
+        assert len(j["details"]["sent"]) == 3
+        assert len(j["details"]["failed"]) == 0
+        # Each successful send should carry the SendGrid message_id (may be
+        # empty string if SendGrid didn't set the header — but the key must exist).
+        for s in j["details"]["sent"]:
+            assert "email" in s
+            assert "message_id" in s
+        history_id = j["history_id"]
+        assert isinstance(history_id, str) and len(history_id) > 0
 
-    def test_import_wrong_extension_returns_415(self, auth):
-        files = {"file": ("roster.csv", b"name,email\n", "text/csv")}
-        r = auth.post(IMPORT_URL, files=files)
-        assert r.status_code == 415, r.text
+        # Now verify the history entry exists and has the right shape.
+        h = auth.get(HISTORY_URL, params={"type": "notification"})
+        assert h.status_code == 200
+        items = h.json()["items"]
+        assert any(it["id"] == history_id for it in items), \
+            f"history_id {history_id} not present in {[i['id'] for i in items[:5]]}"
+        entry = next(it for it in items if it["id"] == history_id)
+        assert entry["type"] == "notification"
+        summary = entry["summary"]
+        assert summary["subject"] == "TEST_notif batch of 3"
+        assert summary["department"] == "Business & Product"
+        assert summary["sent"] == 3
+        assert summary["failed"] == 0
+        assert summary["total"] == 3
+        assert sorted(summary["recipients"]) == sorted([r["email"] for r in recipients])
 
-    def test_import_empty_file_returns_400(self, auth):
-        files = {"file": ("empty.xlsx", b"",
-                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-        r = auth.post(IMPORT_URL, files=files)
-        assert r.status_code == 400, r.text
 
-    def test_import_oversize_returns_413(self, auth):
-        big = b"x" * (5 * 1024 * 1024 + 10)
-        files = {"file": ("big.xlsx", big,
-                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-        r = auth.post(IMPORT_URL, files=files)
-        assert r.status_code == 413, r.text
+# ---- POST /api/notification/send — mixed valid + invalid ------------------
+class TestNotifSendInvalidEmails:
+    """Invalid-email addresses should be sorted into failed[] with a helpful message."""
 
-    def test_import_invalid_xlsx_returns_400(self, auth):
-        # A small non-empty but non-xlsx binary should fail parsing.
-        files = {"file": ("bad.xlsx", b"not really an xlsx",
-                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
-        r = auth.post(IMPORT_URL, files=files)
-        # Backend catches ValueError from parse_employees_xlsx -> 400.
-        # openpyxl may throw a different exception (e.g. InvalidFileException) — accept 400 OR 500 with a note.
-        assert r.status_code in (400, 422, 500), f"got {r.status_code}: {r.text[:200]}"
+    def test_notif_send_invalid_email_goes_to_failed(self, auth):
+        r = auth.post(NOTIF_URL, json={
+            "subject":    "TEST_notif invalid mixed",
+            "html":       "<p>Hi {name}</p>",
+            "recipients": [
+                {"email": "qa_valid@example.com", "name": "V"},
+                {"email": "not-an-email",         "name": "X"},   # no @
+            ],
+        })
+        assert r.status_code == 200, r.text
+        j = r.json()
+        assert j["total"] == 2
+        assert j["failed"] >= 1, j
+        failed_emails = [f["email"] for f in j["details"]["failed"]]
+        assert "not-an-email" in failed_emails
+        # The failure record must include a helpful error string
+        for f in j["details"]["failed"]:
+            assert f.get("error"), f

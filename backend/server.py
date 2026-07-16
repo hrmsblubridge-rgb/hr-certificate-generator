@@ -633,6 +633,7 @@ async def offer_appointment_pdf(req: OfferAppointmentRequest,
 # frontend).
 
 from fastapi import UploadFile, File  # noqa: E402
+from bson.binary import Binary  # noqa: E402
 
 
 @api_router.get("/employees/departments")
@@ -677,14 +678,97 @@ async def import_employees(file: UploadFile = File(...),
     return {"ok": True, "inserted": inserted}
 
 
-# ---------------------------------------------------------------------------
-# Document generation history
-# ---------------------------------------------------------------------------
+# --- Batch send: one email per recipient (they each see only themselves) ---
+
+class NotificationRecipient(BaseModel):
+    email: str = Field(min_length=3, max_length=160)
+    name:  str = Field(default="", max_length=120)
+
+
+class NotificationSendRequest(BaseModel):
+    subject:    str = Field(min_length=1, max_length=240)
+    html:       str = Field(min_length=1, max_length=200_000)
+    recipients: List[NotificationRecipient] = Field(min_length=1, max_length=500)
+    cc:         List[str] = Field(default_factory=list, max_length=20)
+    reply_to:   str | None = Field(default=None, max_length=160)
+    department: str | None = Field(default=None, max_length=120)
+
+
+@api_router.post("/notification/send")
+async def notification_send(req: NotificationSendRequest,
+                            session: dict = Depends(require_auth)):
+    """Send an individual email to each recipient (each sees only their own
+    address in the To field). CC owners are copied on every message.
+
+    Returns per-recipient success/failure so the frontend can show a summary.
+    The whole batch is persisted in `history` (type=`notification`)."""
+    subject = sanitize_text(req.subject, field="subject")
+    # Body is HTML — sanitize_text would strip formatting, so we only bound
+    # the size and rely on our own trusted admin-only origin. If ever this
+    # endpoint is opened up to non-admins, wrap `req.html` through bleach.
+    html_template = req.html
+    cc_clean = [c.strip() for c in (req.cc or []) if c and "@" in c]
+
+    sent: list[dict] = []
+    failed: list[dict] = []
+    for r in req.recipients:
+        addr = r.email.strip().lower()
+        if "@" not in addr:
+            failed.append({"email": r.email, "error": "Invalid email address."})
+            continue
+        # Simple `{name}` / `{{name}}` personalisation.
+        personal_html = (html_template
+                         .replace("{{name}}", r.name or "")
+                         .replace("{name}",   r.name or ""))
+        try:
+            msg_id = send_html_email(
+                to_email=addr,
+                subject=subject,
+                html_body=personal_html,
+                reply_to=req.reply_to,
+                cc=cc_clean,
+            )
+            sent.append({"email": addr, "message_id": msg_id})
+        except EmailError as e:
+            failed.append({"email": addr, "error": str(e)})
+
+    # Persist a single history row for the whole batch (no per-email bloat).
+    summary_html = html_template if len(html_template) < 16_000 else html_template[:16_000]
+    entry = {
+        "id":         str(uuid.uuid4()),
+        "type":       "notification",
+        "name":       f"{req.department or 'Custom'} — {len(sent)} sent",
+        "filename":   f"Notification_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html",
+        "summary":    {
+            "subject":     subject,
+            "department":  req.department,
+            "cc":          cc_clean,
+            "total":       len(req.recipients),
+            "sent":        len(sent),
+            "failed":      len(failed),
+            "recipients":  [r.email for r in req.recipients],
+            "failures":    failed[:20],   # cap payload
+        },
+        "size_bytes": len(summary_html),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "pdf":        Binary(summary_html.encode("utf-8")),  # reuse the blob col
+    }
+    await db.history.insert_one(entry)
+
+    return {
+        "ok":     len(failed) == 0,
+        "sent":   len(sent),
+        "failed": len(failed),
+        "total":  len(req.recipients),
+        "details": {"sent": sent, "failed": failed},
+        "history_id": entry["id"],
+    }
+
+
+
 # Each successful PDF generation is persisted in MongoDB so HR can later list
 # what has been generated and re-download any previous document without
 # re-entering the form data.
-
-from bson.binary import Binary
 
 
 async def _save_history(doc_type: str, name: str, filename: str,
