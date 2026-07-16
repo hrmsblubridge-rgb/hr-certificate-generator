@@ -636,6 +636,14 @@ from fastapi import UploadFile, File  # noqa: E402
 from bson.binary import Binary  # noqa: E402
 
 
+@api_router.get("/notification/config")
+async def get_notification_config(_: dict = Depends(require_auth)):
+    """Return client-side config for the Notification Email tab.
+    Currently only surfaces the always-CC address so the UI can show it
+    as a locked chip (server still enforces it regardless)."""
+    return {"always_cc": NOTIFICATION_ALWAYS_CC}
+
+
 @api_router.get("/employees/departments")
 async def get_departments(_: dict = Depends(require_auth)):
     """List distinct departments with headcounts (drives the tab's dropdown)."""
@@ -680,6 +688,11 @@ async def import_employees(file: UploadFile = File(...),
 
 # --- Batch send: one email per recipient (they each see only themselves) ---
 
+# Front desk is always CC'd on every notification email for an internal audit
+# trail — required by ops, non-removable from the frontend (server enforces).
+NOTIFICATION_ALWAYS_CC = "frontdesk@blubridge.com"
+
+
 class NotificationRecipient(BaseModel):
     email: str = Field(min_length=3, max_length=160)
     name:  str = Field(default="", max_length=120)
@@ -707,7 +720,19 @@ async def notification_send(req: NotificationSendRequest,
     # the size and rely on our own trusted admin-only origin. If ever this
     # endpoint is opened up to non-admins, wrap `req.html` through bleach.
     html_template = req.html
-    cc_clean = [c.strip() for c in (req.cc or []) if c and "@" in c]
+    # Assemble the CC list. `frontdesk@blubridge.com` is ALWAYS appended
+    # (audit trail — see product spec 2026-07-16). Manoj+Praveen defaults
+    # come in from the frontend and remain editable there.
+    cc_incoming = [c.strip() for c in (req.cc or []) if c and "@" in c]
+    cc_incoming.append(NOTIFICATION_ALWAYS_CC)
+    # Case-insensitive dedupe while preserving user-visible order.
+    seen: set[str] = set()
+    cc_clean: list[str] = []
+    for addr in cc_incoming:
+        k = addr.lower()
+        if k in seen: continue
+        seen.add(k)
+        cc_clean.append(addr)
 
     sent: list[dict] = []
     failed: list[dict] = []

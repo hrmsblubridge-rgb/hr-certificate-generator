@@ -41,6 +41,18 @@ spacing, margins, header, footer, logo, signature, layout).
 - [x] Output is a downloadable PDF preserving original appearance
 
 ## Implemented
+- **v23 (2026-07-16)** **Notification Email — richer editor + audit-CC.**
+  Added missing HTML editor features per user request: Paragraph-style
+  dropdown (Normal / H1 / H2 / H3 / Code block), **Text alignment**
+  (Left / Center / Right / Justify), Strikethrough, **Text-colour palette**
+  (9 swatches + reset), Indent / Outdent, Blockquote, and Horizontal rule.
+  Plus the previously-shipped Bold/Italic/Underline/lists/link/clear/undo/
+  redo. `frontdesk@blubridge.com` is now an **always-CC** on every batch —
+  displayed as a locked pinned chip below the CC input and enforced
+  server-side (backend appends it to the CC list even if the frontend
+  omits it). New endpoint `GET /api/notification/config` surfaces the
+  address for the UI chip.
+
 - **v22 (2026-07-16)** **Notification Email pivoted to true 1-click send.**
   Per user directive ("No BCC option... they don't see others... HTML editor...
   One click Send button from here app itself"): removed BCC entirely, added a

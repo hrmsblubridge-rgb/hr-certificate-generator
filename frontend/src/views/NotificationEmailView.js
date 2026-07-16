@@ -33,6 +33,7 @@ export default function NotificationEmailView() {
 
   // --- Compose state ---
   const [ccAddr, setCcAddr]         = useState(DEFAULT_CC);
+  const [alwaysCc, setAlwaysCc]     = useState("");   // server-enforced audit CC
   const [customRcp, setCustomRcp]   = useState(""); // free-text extra To recipients
   const [subject, setSubject]       = useState("");
   const [html, setHtml]             = useState("");
@@ -47,8 +48,12 @@ export default function NotificationEmailView() {
 
   const loadDepartments = useCallback(async () => {
     try {
-      const r = await apiJSON("/employees/departments");
-      setDepts(r.items || []);
+      const [d, c] = await Promise.all([
+        apiJSON("/employees/departments"),
+        apiJSON("/notification/config").catch(() => ({ always_cc: "" })),
+      ]);
+      setDepts(d.items || []);
+      setAlwaysCc(c.always_cc || "");
     } catch { setDepts([]); }
   }, []);
 
@@ -315,6 +320,19 @@ export default function NotificationEmailView() {
               placeholder="Comma-separated emails"
               className="mt-1 w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm focus:outline-none focus:border-[#232369]/60 focus:ring-2 focus:ring-[#232369]/15"
             />
+            {alwaysCc && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="notif-always-cc-row">
+                <span className="text-[10.5px] uppercase tracking-wide text-[#1a1a1f]/45">Auto-CC:</span>
+                <span
+                  data-testid="notif-always-cc"
+                  className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#232369]/8 text-[#232369] border border-[#232369]/25"
+                  title="Server-enforced audit copy — always included on every send."
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-80"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+                  {alwaysCc}
+                </span>
+              </div>
+            )}
             <p className="mt-1 text-[11px] text-[#1a1a1f]/50">
               Owners copied on every individual email. Sender is
               <code className="mx-1 px-1 py-0.5 rounded bg-[#f6f4ef] text-[#232369] text-[10.5px]">hr@blubridge.com</code>
