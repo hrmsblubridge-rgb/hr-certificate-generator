@@ -41,6 +41,17 @@ spacing, margins, header, footer, logo, signature, layout).
 - [x] Output is a downloadable PDF preserving original appearance
 
 ## Implemented
+- **v24 (2026-07-17)** **Notification Email — CC now fully manual.**
+  Per user directive ("remove auto cc including email also default CC two
+  person remove it..We will enter manually"): (1) removed the server-side
+  auto-append of `frontdesk@blubridge.com`, (2) removed the frontend
+  default of `manoj@blubridge.com, praveen@blubridge.com` (field now
+  starts empty), (3) removed the locked "Auto-CC" chip, and (4) dropped
+  the `GET /api/notification/config` endpoint (now 404). CC field label
+  changed to "CC (optional)" with placeholder "Comma-separated emails
+  (leave blank for none)". Verified: send with `cc:[]` persists
+  `summary.cc = []` in history.
+
 - **v23 (2026-07-16)** **Notification Email — richer editor + audit-CC.**
   Added missing HTML editor features per user request: Paragraph-style
   dropdown (Normal / H1 / H2 / H3 / Code block), **Text alignment**
