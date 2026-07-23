@@ -1,0 +1,49 @@
+{
+  "summary": "Deployment-fix verification (openpyxl + python-multipart missing from requirements.txt). All 7 pytest cases green in tests/test_deployment_fix.py. Confirmed: (1) openpyxl==3.1.5 and python-multipart==0.0.32 pinned in /app/backend/requirements.txt; (2) fresh venv built ONLY from requirements.txt successfully runs `import server, employees; from server import app` — reports exactly 28 routes with exit code 0 and NO ModuleNotFoundError/ImportError; (3) GET /api/employees/departments returns the 3 seeded departments (Research Unit=45, Support Staff=5, Business & Product=2) — proves openpyxl parsed employees_seed.xlsx at boot; (4) POST /api/employees/import with a re-upload of /app/backend/data/employees_seed.xlsx returns 200 with {ok:true, inserted:52} — proves python-multipart is properly wired for FastAPI UploadFile; (5) Notification send regression (2 valid recipients) still returns {ok:true, sent:2, total:2, failed:0}; (6) tail -n 200 /var/log/supervisor/backend.err.log after `supervisorctl restart backend` shows NO 'ModuleNotFoundError: No module named openpyxl', NO 'multipart' error, NO 'Form data requires python-multipart' error. Static-import audit of /app/backend/*.py (openpyxl, bcrypt, jwt, pymupdf, python-docx, python-dotenv, fastapi, motor, pymongo, pydantic, sendgrid, starlette, uvicorn, PyJWT) — every third-party import maps to a pinned distribution in requirements.txt.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_deployment_fix.py",
+    "/app/test_reports/pytest/deployment_fix_results.xml"
+  ],
+  "tests_executed": {
+    "pytest_7_of_7_passed": [
+      "TestRequirementsPinning::test_openpyxl_pinned_exact — grep '^openpyxl==3.1.5' in requirements.txt PASS",
+      "TestRequirementsPinning::test_python_multipart_pinned_exact — grep '^python-multipart==0.0.32' in requirements.txt PASS",
+      "TestCleanVenvImport::test_clean_venv_imports_server_and_employees — python3 -m venv /tmp/verify_venv + pip install -q -r requirements.txt + `python -c 'import server, employees; from server import app; print(len(app.routes))'` -> stdout '28', exit 0, stderr contains only benign 'No frontend build at /app/frontend/build' info line; no ModuleNotFoundError / ImportError",
+      "TestDepartmentsEndpoint::test_departments_returns_three_seeded_departments — GET /api/employees/departments -> 200 items=[{name:'Business & Product',count:2},{name:'Research Unit',count:45},{name:'Support Staff',count:5}]",
+      "TestEmployeesImport::test_import_seed_xlsx_returns_ok_and_inserted_52 — POST /api/employees/import (multipart/form-data with /app/backend/data/employees_seed.xlsx) -> 200 {ok:true, inserted:52}",
+      "TestNotificationSendRegression::test_notif_send_two_valid_recipients — POST /api/notification/send with 2 recipients -> 200 {ok:true, sent:2, total:2, failed:0}",
+      "TestSupervisorLogClean::test_no_missing_package_errors_in_backend_err_log — tail of backend.err.log contains none of the forbidden strings (openpyxl / multipart / 'Form data requires python-multipart')"
+    ],
+    "manual_shell_checks": [
+      "sudo supervisorctl restart backend — 'backend: stopped\\nbackend: started', then `grep -iE 'error|traceback|modulenotfound|importerror' /var/log/supervisor/backend.err.log` -> NO ERRORS IN LOG",
+      "/tmp/verify_venv/bin/pip show openpyxl python-multipart -> Version: 3.1.5 and Version: 0.0.32 (exact pins)"
+    ]
+  },
+  "action_items": [
+    "None. Deployment fix is verified end-to-end. Safe to redeploy to Render."
+  ],
+  "critical_code_review_comments": [
+    "requirements.txt is well-documented with per-package rationale (cp312 wheel notes, transitive dependency notes for starlette/lxml, explicit warning about emergentintegrations being internal). Good hygiene.",
+    "Full third-party import audit confirms no other missing packages. Every 3rd-party import in /app/backend/*.py (openpyxl, bcrypt, jwt/PyJWT, pymupdf, python-docx, python-dotenv, fastapi, motor, pymongo, pydantic, sendgrid, starlette, uvicorn, bson via pymongo) is pinned in requirements.txt with a version that ships a cp312 wheel (or is pure-Python) — zero source compilation on Render."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deployment_fix.py (new — 7 tests: 2 pinning checks, 1 clean-venv smoke test, 2 xlsx-dependent endpoint tests, 1 notification send regression, 1 supervisor log regression)",
+    "/app/test_reports/pytest/deployment_fix_results.xml (JUnit output)"
+  ],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "N/A (skipped — backend-only per review request)"},
+  "test_credentials": "admin / pass123 — /api/auth/login -> 200 verified",
+  "seed_data_creation": "One additional TEST_iter6 notification history row created during the regression test (safe to leave; can be bulk-deleted from the History tab). The POST /api/employees/import test rewrote the employees collection with the same 52 rows from the same seed file, so no data drift.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Deployment-fix regression is now covered by /app/backend/tests/test_deployment_fix.py — run before every Render deploy to catch any newly-added third-party import that isn't pinned. The clean-venv smoke test (TestCleanVenvImport) is the strongest signal: it will reproduce the Render build error locally in <30s. If a new backend module imports a new 3rd-party lib without pinning it in requirements.txt, that test will fail with the exact ModuleNotFoundError before any other test runs.",
+  "rca_of_the_issue": "ROOT CAUSE (fixed by main agent E1 in the previous step): server.py imports employees.py which does `import openpyxl` at line 23; server.py also uses `from fastapi import UploadFile, File` and defines `POST /api/employees/import` which requires python-multipart at request time (FastAPI raises 'Form data requires python-multipart to be installed' otherwise). Neither package was listed in requirements.txt, so `pip install -r requirements.txt` on Render produced a Python environment that couldn't even import the entrypoint. FIX (verified): appended `openpyxl==3.1.5` and `python-multipart==0.0.32` to /app/backend/requirements.txt with inline rationale comments. REPRO STEPS: `python3 -m venv /tmp/verify_venv && /tmp/verify_venv/bin/pip install -q -r /app/backend/requirements.txt && cd /app/backend && /tmp/verify_venv/bin/python -c 'import server, employees; from server import app; print(len(app.routes))'` -> now prints '28' and exits 0 (previously: ModuleNotFoundError). MITIGATION: the new test_deployment_fix.py::TestCleanVenvImport test locks this in as a regression."
+}

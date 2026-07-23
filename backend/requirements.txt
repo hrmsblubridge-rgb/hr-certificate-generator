@@ -39,3 +39,12 @@ python-dotenv==1.0.1
 
 # --- Transactional email (SendGrid) ---
 sendgrid==6.12.5
+
+# --- Excel roster (Notification Email tab) ---
+openpyxl==3.1.5                # pure-Python wheel — parses employees_seed.xlsx
+                               # and any HR-uploaded roster replacement.
+
+# --- Multipart form parsing (required by FastAPI's UploadFile) ---
+python-multipart==0.0.32       # backs the /api/employees/import xlsx upload;
+                               # FastAPI refuses to start any endpoint that
+                               # uses `File(...)` without this at import time.
