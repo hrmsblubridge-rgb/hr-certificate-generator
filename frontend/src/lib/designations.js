@@ -23,6 +23,7 @@ export const DESIGNATIONS = [
   "UI/UX Design Intern",
   "Product Management Intern",
   "Business Analyst Intern",
+  "Business Development Intern",
   "Marketing Intern",
   "HR Intern",
   "Research Intern",
