@@ -23,6 +23,27 @@ const selectArrowStyle = {
     "url(\"data:image/svg+xml;charset=US-ASCII,%3Csvg width='12' height='8' viewBox='0 0 12 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%231a1a1f' stroke-opacity='0.55' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
 };
 
+// Suggested CC recipients — clickable chips, never auto-applied.
+const CC_SUGGESTIONS = [
+  "manoj@blubridge.com",
+  "praveen@blubridge.com",
+  "kripa@blubridge.com",
+];
+
+function splitEmails(str) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of (str || "").split(/[,\n;]+/)) {
+    const e = raw.trim();
+    if (!e || !e.includes("@")) continue;
+    const k = e.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(e);
+  }
+  return out;
+}
+
 // ---- preview modal ------------------------------------------------------
 function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateName, onClose }) {
   // HTML can be MUTATED via the inline edit-content feature, so we hold it
@@ -37,8 +58,15 @@ function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateNa
   const [subject, setSubject] = useState(
     candidateName ? `Offer of Appointment — ${candidateName}` : "Offer of Appointment"
   );
+  const [ccEmail, setCcEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState(null); // { ok, message }
+
+  const ccList = splitEmails(ccEmail);
+  const addCc = (addr) => {
+    if (ccList.some((e) => e.toLowerCase() === addr.toLowerCase())) return;
+    setCcEmail(ccList.concat(addr).join(", "));
+  };
 
   // Toggle the iframe body's contenteditable when entering / leaving edit
   // mode. Reads back the edited document on Save so subsequent actions use
@@ -86,9 +114,14 @@ function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateNa
     try {
       const res = await apiJSON("/offer-email/send", {
         method: "POST",
-        body: { to_email: toEmail, subject, html, name: candidateName || "" },
+        body: { to_email: toEmail, subject, html, name: candidateName || "", cc: ccList },
       });
-      setSendResult({ ok: true, message: `Sent to ${toEmail}` + (res.message_id ? ` · id ${res.message_id.slice(0,12)}…` : "") });
+      setSendResult({
+        ok: true,
+        message: `Sent to ${toEmail}`
+          + (ccList.length ? ` · CC ${ccList.length}` : "")
+          + (res.message_id ? ` · id ${res.message_id.slice(0,12)}…` : ""),
+      });
     } catch (e) {
       setSendResult({ ok: false, message: e.message || "Send failed." });
     } finally {
@@ -235,6 +268,42 @@ function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateNa
                     className="w-full bg-white border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2 text-sm"
                   />
                 </label>
+              </div>
+              <div>
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-[#1a1a1f]/55 mb-1">
+                  CC (optional)
+                </span>
+                <input
+                  data-testid="oe-send-cc"
+                  type="text"
+                  value={ccEmail}
+                  onChange={(e) => setCcEmail(e.target.value)}
+                  placeholder="Comma-separated emails — leave blank for none"
+                  className="w-full bg-white border border-[#1a1a1f]/15 focus:border-[#232369] focus:outline-none rounded-md px-3 py-2 text-sm"
+                />
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-[10.5px] uppercase tracking-wider text-[#1a1a1f]/45">Quick add</span>
+                  {CC_SUGGESTIONS.map((addr) => {
+                    const active = ccList.some((e) => e.toLowerCase() === addr.toLowerCase());
+                    return (
+                      <button
+                        key={addr}
+                        type="button"
+                        data-testid={`oe-cc-chip-${addr.split("@")[0]}`}
+                        onClick={() => addCc(addr)}
+                        disabled={active}
+                        className={
+                          "text-[11px] px-2.5 py-1 rounded-full border transition-colors " +
+                          (active
+                            ? "bg-[#232369] text-white border-[#232369] cursor-default"
+                            : "bg-white text-[#232369] border-[#232369]/30 hover:bg-[#232369]/8")
+                        }
+                      >
+                        {active ? "✓ " : "+ "}{addr}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {sendResult && (
                 <div

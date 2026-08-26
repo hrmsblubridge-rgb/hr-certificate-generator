@@ -198,6 +198,8 @@ spacing, margins, header, footer, logo, signature, layout).
    - Salary in Words (body paragraph)
   Implementation: `backend/offer_letter.py` is a config-driven per-line redact+re-render pipeline. Each editable line is white-out then redrawn segment-by-segment using bundled Arimo Regular/Bold (Arial-metric-equivalent, Apache 2.0). Position, font, size (11pt), weight, color (#000) are preserved exactly. Backend endpoint: `POST /api/offer/generate`. Frontend: `OfferLetterView` with a top-tab menu in `App.js` switching between the two templates. PDF download verified end-to-end through the public URL: 7 pages preserved, all entered values present, annexure pages and signature block intact.
 
+- **v15 (2026-06-26)** Offer Letter (Email) send panel: added a **manual CC textbox** (`data-testid="oe-send-cc"`, comma/semicolon/newline separated, dedup) plus three **quick-add chips** below it — `manoj@`, `praveen@`, `kripa@blubridge.com`. Chips are click-to-add only; CC starts empty (nothing auto-CC'd). Backend `POST /api/offer-email/send` now accepts `cc: List[str]` (max 20) and forwards it to `send_html_email(cc=...)`. Meta title changed to **"HR Offer Letter Management | BluBridge"**. Rotated `SENDGRID_API_KEY` in `backend/.env` (must also be set in the Render dashboard env for production). No test emails were sent per user instruction.
+
 ## Verification (v2)
 - `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`
 - Downloaded PDF: 0 form fields, all 4 values present in content stream, original Aravind values removed, all surrounding wording / signature / footer intact

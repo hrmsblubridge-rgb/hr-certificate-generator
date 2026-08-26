@@ -503,6 +503,7 @@ class OfferEmailSendRequest(BaseModel):
     reply_to:  str | None = Field(default=None, max_length=160)
     name:      str | None = Field(default=None, max_length=120)
     history_id: str | None = Field(default=None, max_length=80)
+    cc:        List[str] = Field(default_factory=list, max_length=20)
 
 
 @api_router.post("/offer-email/send")
@@ -515,12 +516,18 @@ async def offer_email_send(req: OfferEmailSendRequest,
     with the message-id + recipient so the operator can audit later."""
     if "@" not in req.to_email:
         raise HTTPException(status_code=422, detail="Invalid recipient email.")
+    cc_clean = []
+    for raw in (req.cc or []):
+        addr = (raw or "").strip()
+        if addr and "@" in addr and addr.lower() not in {c.lower() for c in cc_clean}:
+            cc_clean.append(addr)
     try:
         message_id = send_html_email(
             to_email=req.to_email,
             subject=req.subject,
             html_body=req.html,
             reply_to=req.reply_to,
+            cc=cc_clean,
         )
     except EmailError as e:
         # Surface SendGrid configuration / delivery issues with the actual
