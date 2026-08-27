@@ -24,6 +24,7 @@ const MENU = [
 
 function App() {
   const [authState, setAuthState] = useState("checking"); // checking | in | out
+  const [slowBoot, setSlowBoot] = useState(false);
   const [view, setView] = useState("certificate");
   const [username, setUsername] = useState("");
   const [showChangePw, setShowChangePw] = useState(false);
@@ -38,7 +39,13 @@ function App() {
     }
   };
 
-  useEffect(() => { refreshAuth(); }, []);
+  useEffect(() => {
+    refreshAuth();
+    // If the host is cold-starting, tell the user instead of showing a bare
+    // "Loading…" forever.
+    const t = setTimeout(() => setSlowBoot(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   const logout = async () => {
     try { await apiFetch("/auth/logout", { method: "POST" }); } catch { /* ignore */ }
@@ -47,8 +54,14 @@ function App() {
 
   if (authState === "checking") {
     return (
-      <div className="min-h-screen grid place-items-center bg-[#e8e4dc] text-[#1a1a1f]/55 text-sm">
-        Loading…
+      <div
+        data-testid="app-loading"
+        className="min-h-screen grid place-items-center bg-[#e8e4dc] text-[#1a1a1f]/55 text-sm"
+      >
+        <div className="flex flex-col items-center gap-3">
+          <span className="w-6 h-6 rounded-full border-2 border-[#232369]/25 border-t-[#232369] animate-spin" />
+          <span>{slowBoot ? "Waking up the server — one moment…" : "Loading…"}</span>
+        </div>
       </div>
     );
   }

@@ -61,7 +61,12 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=8000,
+    connectTimeoutMS=8000,
+    maxPoolSize=20,
+)
 db = client[os.environ['DB_NAME']]
 
 # Create the main app without a prefix
@@ -86,6 +91,13 @@ class StatusCheckCreate(BaseModel):
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
+
+
+@api_router.get("/health")
+async def health():
+    """Cheap liveness probe — no DB, no auth. Point an uptime pinger at this
+    every 10 minutes to keep the host warm and avoid cold-start delays."""
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -903,6 +915,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "form-action 'self'"
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
+        # Caching: CRA emits content-hashed filenames under /static, so they
+        # can be cached forever. index.html (and any SPA fallback) must always
+        # revalidate or users would keep an old bundle after a deploy.
+        path = request.url.path
+        if path.startswith("/static/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif path.startswith("/favicon") or path.startswith("/apple-touch-icon"):
+            response.headers["Cache-Control"] = "public, max-age=604800"
+        elif not path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = (
@@ -927,23 +949,34 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def _on_startup():
+    # Kick the DB bootstrap off in the background so uvicorn starts accepting
+    # requests immediately. On a cold start (Render spin-up) this shaves the
+    # Atlas connect + index round-trips off the very first page load.
+    import asyncio
+    asyncio.create_task(_bootstrap_db())
+
+
+async def _bootstrap_db():
     # One-shot bootstrap: if no admin row exists and HR_USERNAME/HR_PASSWORD
     # env vars are set, seed a single admin. Existing DB hashes are never
     # overwritten — the database is the sole source of truth thereafter.
-    seeded = await bootstrap_admin_if_missing(db)
-    if seeded:
-        logger.warning(
-            "Admin bootstrapped from env. Delete HR_USERNAME/HR_PASSWORD "
-            "from your production environment now."
-        )
-    # Helpful indexes for the auth collections
-    await db.users.create_index("created_at")
-    await db.login_attempts.create_index("locked_until")
-    # One-shot roster seed for the Notification Email compose helper.
-    seeded_employees = await bootstrap_employees_if_empty(db)
-    if seeded_employees:
-        logger.info("Employees seeded (%d rows).", seeded_employees)
-    logger.info("Auth ready (indexes ensured).")
+    try:
+        seeded = await bootstrap_admin_if_missing(db)
+        if seeded:
+            logger.warning(
+                "Admin bootstrapped from env. Delete HR_USERNAME/HR_PASSWORD "
+                "from your production environment now."
+            )
+        # Helpful indexes for the auth collections
+        await db.users.create_index("created_at")
+        await db.login_attempts.create_index("locked_until")
+        # One-shot roster seed for the Notification Email compose helper.
+        seeded_employees = await bootstrap_employees_if_empty(db)
+        if seeded_employees:
+            logger.info("Employees seeded (%d rows).", seeded_employees)
+        logger.info("Auth ready (indexes ensured).")
+    except Exception:
+        logger.exception("DB bootstrap failed (server still serving).")
 
 
 @app.on_event("shutdown")
