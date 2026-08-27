@@ -5,7 +5,8 @@ import {
 import { apiFetch, apiJSON, API } from "@/lib/api";
 import RichTextEditor from "../components/RichTextEditor";
 
-const DEFAULT_CC = "";   // HR enters CC manually per send
+// Always pre-filled in the CC box; HR can edit or clear it per send.
+const DEFAULT_CC = "manoj@blubridge.com, praveen@blubridge.com, kripa@blubridge.com";
 
 // Split comma / newline / semicolon separated emails into an array,
 // case-insensitive dedupe.
