@@ -58,7 +58,7 @@ function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateNa
   const [subject, setSubject] = useState(
     candidateName ? `Offer of Appointment — ${candidateName}` : "Offer of Appointment"
   );
-  const [ccEmail, setCcEmail] = useState(CC_SUGGESTIONS.join(", "));
+  const [ccEmail, setCcEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState(null); // { ok, message }
 

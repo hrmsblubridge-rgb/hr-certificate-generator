@@ -5,8 +5,13 @@ import {
 import { apiFetch, apiJSON, API } from "@/lib/api";
 import RichTextEditor from "../components/RichTextEditor";
 
-// Always pre-filled in the CC box; HR can edit or clear it per send.
-const DEFAULT_CC = "manoj@blubridge.com, praveen@blubridge.com, kripa@blubridge.com";
+// CC starts empty; the 3 addresses below are click-to-add suggestions only.
+const DEFAULT_CC = "";
+const CC_SUGGESTIONS = [
+  "manoj@blubridge.com",
+  "praveen@blubridge.com",
+  "kripa@blubridge.com",
+];
 
 // Split comma / newline / semicolon separated emails into an array,
 // case-insensitive dedupe.
@@ -321,6 +326,30 @@ export default function NotificationEmailView() {
               <code className="mx-1 px-1 py-0.5 rounded bg-[#f6f4ef] text-[#232369] text-[10.5px]">hr@blubridge.com</code>
               (SendGrid verified).
             </p>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <span className="text-[10.5px] uppercase tracking-wider text-[#1a1a1f]/45">Quick add</span>
+              {CC_SUGGESTIONS.map((addr) => {
+                const ccNow = splitEmails(ccAddr);
+                const active = ccNow.some((e) => e.toLowerCase() === addr.toLowerCase());
+                return (
+                  <button
+                    key={addr}
+                    type="button"
+                    data-testid={`notif-cc-chip-${addr.split("@")[0]}`}
+                    onClick={() => { if (!active) setCcAddr(ccNow.concat(addr).join(", ")); }}
+                    disabled={active}
+                    className={
+                      "text-[11px] px-2.5 py-1 rounded-full border transition-colors " +
+                      (active
+                        ? "bg-[#232369] text-white border-[#232369] cursor-default"
+                        : "bg-white text-[#232369] border-[#232369]/30 hover:bg-[#232369]/8")
+                    }
+                  >
+                    {active ? "✓ " : "+ "}{addr}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>

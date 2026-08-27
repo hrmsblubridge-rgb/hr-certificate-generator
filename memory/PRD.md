@@ -201,6 +201,8 @@ spacing, margins, header, footer, logo, signature, layout).
 - **v15 (2026-06-26)** Offer Letter (Email) send panel: added a **manual CC textbox** (`data-testid="oe-send-cc"`, comma/semicolon/newline separated, dedup) plus three **quick-add chips** below it — `manoj@`, `praveen@`, `kripa@blubridge.com`. Chips are click-to-add only; CC starts empty (nothing auto-CC'd). Backend `POST /api/offer-email/send` now accepts `cc: List[str]` (max 20) and forwards it to `send_html_email(cc=...)`. Meta title changed to **"HR Offer Letter Management | BluBridge"**. Rotated `SENDGRID_API_KEY` in `backend/.env` (must also be set in the Render dashboard env for production). No test emails were sent per user instruction.
 - **v15.1 (2026-06-27)** Per user follow-up, the 3 CC addresses (manoj@, praveen@, kripa@blubridge.com) are now **pre-filled by default** in the CC box of BOTH the Notification Email tab (`DEFAULT_CC`) and the Offer Letter (Email) send panel. Still fully editable/clearable per send; quick-add chips remain on the Offer Letter panel. No test emails sent.
 
+- **v15.2 (2026-06-27)** Final CC behaviour (user choice "a+c"): CC box starts **empty** on both the Offer Letter (Email) send panel and the Notification Email tab, with a **Quick add** chips row below it for manoj@, praveen@, kripa@blubridge.com (click-to-add, dedup, chip greys out once added). Nothing is auto-CC'd. Verified in preview; no test emails sent.
+
 ## Verification (v2)
 - `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`
 - Downloaded PDF: 0 form fields, all 4 values present in content stream, original Aravind values removed, all surrounding wording / signature / footer intact
