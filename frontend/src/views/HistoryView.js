@@ -10,6 +10,7 @@ const TYPE_META = {
   offer:        { label: "Offer Letter",            icon: FileSignature, color: "#1e6f59" },
   ack:          { label: "Acknowledgement",         icon: FileCheck,     color: "#7a4119" },
   notification: { label: "Notification Email",       icon: FileText,      color: "#3b3b6b" },
+  doc:          { label: "Letterhead Document",      icon: FileText,      color: "#5a2f6b" },
 };
 
 const FILTERS = [
@@ -18,6 +19,7 @@ const FILTERS = [
   { id: "offer",        label: "Offer Letters"    },
   { id: "ack",          label: "Acknowledgements" },
   { id: "notification", label: "Notifications"    },
+  { id: "doc",          label: "Doc"              },
 ];
 
 function formatBytes(n) {
@@ -47,6 +49,8 @@ function formatSummary(type, summary) {
     return `${summary.date} · ${summary.marksheet_type} Mark Sheet`;
   if (type === "notification")
     return `${summary.subject || "(no subject)"} · ${summary.sent || 0}/${summary.total || 0} sent${summary.failed ? ` · ${summary.failed} failed` : ""}`;
+  if (type === "doc")
+    return summary.include_signature ? "With seal & signature" : "No seal";
   return JSON.stringify(summary);
 }
 

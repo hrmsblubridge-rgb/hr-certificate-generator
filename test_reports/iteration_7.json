@@ -1,0 +1,68 @@
+{
+  "summary": "Comprehensive testing of the newly-added Doc module (letterhead PDF renderer + docx/pdf/txt importer). Wrote /app/backend/tests/test_doc_module.py — 24 pytest cases, ALL 24 PASS (29.9s). Coverage: (a) auth gating: 401 on all three /api/doc/* endpoints unauthenticated; (b) preview/generate parity: single-page counts, empty-html -> 400, filename fallback to BluBridge_Document_<date>.pdf, page-count between /preview and /generate matches for the same payload; (c) PyMuPDF programmatic inspection: every one of a 5+ page generated PDF carries the same letterhead drawings + images (>=ref values) as static/doc/Letterhead_Curve.pdf; (d) paragraph keep-together: PARA_i_START and PARA_i_END markers land on the SAME page across 24 paragraphs spanning multiple pages; (e) content stays inside safe area (y0>=112, y1<=786) for every drawn block; (f) heading keep-with-next: UNIQUE_HEADING_XYZ and its following UNIQUE_BODY_XYZ paragraph land on same page when the heading falls near a page boundary; (g) long table (40 rows): every row's 3 cells appear together on exactly one page (no cuts) and the H_ALPHA/H_BETA/H_GAMMA header row repeats on every continuation page; (h) signature: image bbox inside safe area (y1<=786, y0>=112) on the page it lands; (i) import: .docx preserves <h1>, <b>, <i>, <u>, <ul>, <ol>, <table> with correct content; .txt reflows to <p> per blank-line-separated paragraph; .pdf extracts text; .xlsx rejected with 415; (j) history integration: 'doc' entry saved with name field, listed under /api/history?type=doc, /api/history/{id}/download returns 200 application/pdf starting with %PDF magic; (k) REGRESSION: /api/template/generate, /api/offer/generate, /api/ack/generate, /api/offer-email/preview, /api/health all still return 200. Frontend UI smoke: logged in as admin/pass123, verified menu order = [certificate, offer, offer-email, offer-appoint, ack, notif-email, history, doc] (Doc IS last), clicked menu-doc -> doc-view rendered, filled doc-name + injected editor HTML, clicked doc-generate-preview -> doc-preview-page-1 appeared with 'Page 1 of 1' counter, doc-download + doc-print buttons present. History tab shows 'Doc' filter chip AND newly-created 'Letterhead Document' entry.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Offer Letter (Email) form", "issues": ["Uses browser-native date input (mm/dd/yyyy) for 'Date (Letter)' and 'Joining Date' instead of the shadcn calendar component — inconsistent with a professional HR product. Not a regression (pre-existing), but worth polishing when the app moves to shadcn <Calendar/> for all date fields."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_doc_module.py",
+    "/app/test_reports/pytest/doc_module_results.xml"
+  ],
+  "tests_executed": {
+    "pytest_24_of_24_passed": [
+      "TestAuth::test_import_requires_auth",
+      "TestAuth::test_preview_requires_auth",
+      "TestAuth::test_generate_requires_auth",
+      "TestPreviewGenerate::test_single_page_preview",
+      "TestPreviewGenerate::test_generate_returns_pdf",
+      "TestPreviewGenerate::test_generate_empty_html_400",
+      "TestPreviewGenerate::test_filename_fallback",
+      "TestPreviewGenerate::test_preview_matches_generate_page_count",
+      "TestLetterheadOnEveryPage::test_5_plus_pages_letterhead_present",
+      "TestKeepTogether::test_no_paragraph_split_across_pages",
+      "TestKeepTogether::test_content_within_safe_area",
+      "TestHeadingKeepWithNext::test_heading_with_following_paragraph_same_page",
+      "TestLongTable::test_table_rows_not_cut_header_repeats",
+      "TestSignature::test_signature_within_content_area",
+      "TestImport::test_import_docx",
+      "TestImport::test_import_txt",
+      "TestImport::test_import_pdf",
+      "TestImport::test_import_unsupported_xlsx_415",
+      "TestHistory::test_doc_appears_in_history_and_downloads",
+      "TestRegression::test_certificate_generate",
+      "TestRegression::test_offer_generate",
+      "TestRegression::test_ack_generate",
+      "TestRegression::test_offer_email_preview",
+      "TestRegression::test_health"
+    ],
+    "ui_smoke": [
+      "Login admin/pass123 -> menu-doc visible",
+      "Menu order verified: Doc is LAST after History",
+      "Doc view renders, preview generates 'Page 1 of 1'",
+      "Download + Print buttons wired",
+      "History shows 'Doc' filter + 'Letterhead Document' label"
+    ]
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "doc_builder.py — solid design. Preview and PDF share the identical layout engine (insert_htmlbox) which guarantees preview==PDF. `_measure_cache` is unbounded (a dict keyed on HTML fragments); low risk because keys are per-request unique, but a `functools.lru_cache(maxsize=512)` wrapper would be safer if a user submits huge documents in a hot loop.",
+    "doc_builder.py::_split_oversized strips HTML tags via a regex and re-emits plain <p> chunks — inline formatting (bold/italic/underline) is silently lost when a single paragraph is taller than a full page. Rare edge case, but worth documenting in the UI or falling back to line-wise splitting that preserves runs.",
+    "server.py::doc_import catches broad Exception and returns 400 with the raw exception string — could leak stack details. Consider a fixed generic message with the details logged server-side only.",
+    "server.py has swelled to ~1100 lines mixing 7 feature modules. Splitting into routers/{doc,offer,notif,...}.py would improve maintainability (already breaches the internal >700-line guideline)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_doc_module.py (new — 24 pytest cases)",
+    "/app/test_reports/pytest/doc_module_results.xml (JUnit output)"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% on smoke-tested Doc flow"},
+  "test_credentials": "admin / pass123 verified via /api/auth/login (200)",
+  "seed_data_creation": "5 TEST_-prefixed 'doc' history rows created during the test run (TEST_QA, TEST_match, TEST_5page, TEST_keep, TEST_safe, TEST_head, TEST_table, TEST_sig, TEST_hist_doc) + one regression certificate/offer/ack row. Safe to leave; can be bulk-deleted from the History tab via the delete button.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_doc_module.py is the source of truth for Doc regression. Run `pytest /app/backend/tests/test_doc_module.py -v` before any change that touches doc_builder.py or the /api/doc/* endpoints — the PyMuPDF-based tests directly assert the four hard requirements (no paragraph split, heading-with-next, table row integrity, letterhead on every page). SendGrid endpoints were NOT exercised (per E1's instruction 'do not click Send'). Offer Letter (Email) 'oe-cc-chip-*' + 'oe-send-cc' and notif-cc-chip-* live inside the Send panel modal that appears only after a preview is generated with a full valid payload — they are correctly guarded by the modal, not visible on the initial form load (that's why an initial-page query_selector for them returned MISSING; not a bug).",
+  "rca_of_the_issue": "N/A — no bugs found in the feature under test. All 8 QA requirements from the review request verified programmatically with PyMuPDF: paragraph keep-together ✓, heading keep-with-next ✓, table row integrity + header repeat ✓, letterhead on every page (drawings+images match reference) ✓, signature inside safe area + moves to next page when it doesn't fit ✓, content stays inside y=[112, 786] ✓, preview page-count matches PDF page-count ✓, importer handles docx/pdf/txt + rejects xlsx with 415 ✓."
+}

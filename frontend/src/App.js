@@ -7,10 +7,11 @@ import OfferOfAppointmentView from "./views/OfferOfAppointmentView";
 import AcknowledgementView from "./views/AcknowledgementView";
 import NotificationEmailView from "./views/NotificationEmailView";
 import HistoryView from "./views/HistoryView";
+import DocView from "./views/DocView";
 import Login from "./views/Login";
 import ChangePasswordModal from "./views/ChangePasswordModal";
 import { apiFetch, apiJSON } from "@/lib/api";
-import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound, Mail, FileType, Send } from "lucide-react";
+import { FileText, FileSignature, FileCheck, History, LogOut, KeyRound, Mail, FileType, Send, FileBox } from "lucide-react";
 
 const MENU = [
   { id: "certificate",   label: "Internship Certificate", icon: FileText },
@@ -20,6 +21,7 @@ const MENU = [
   { id: "ack",           label: "Acknowledgement",         icon: FileCheck },
   { id: "notif-email",   label: "Notification Email",      icon: Send },
   { id: "history",       label: "History",                  icon: History },
+  { id: "doc",           label: "Doc",                      icon: FileBox },
 ];
 
 function App() {
@@ -154,6 +156,7 @@ function App() {
         : view === "offer-appoint" ? <OfferOfAppointmentView />
         : view === "ack"          ? <AcknowledgementView />
         : view === "notif-email"  ? <NotificationEmailView />
+        : view === "doc"          ? <DocView />
         :                            <HistoryView />}
 
       {showChangePw && (

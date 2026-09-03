@@ -881,6 +881,80 @@ async def get_status_checks():
     
     return status_checks
 
+# ---------------------------------------------------------------------------
+# Doc module — free-form documents rendered onto the official letterhead
+# ---------------------------------------------------------------------------
+from doc_builder import build_pdf as build_doc_pdf, render_preview as render_doc_preview, import_to_html  # noqa: E402
+
+
+class DocRequest(BaseModel):
+    name:              str = Field(default="", max_length=160)
+    html:              str = Field(min_length=1, max_length=500_000)
+    include_signature: bool = True
+
+
+def _doc_filename(name: str) -> str:
+    stem = "".join(c for c in (name or "") if c.isalnum() or c in " _-").strip()
+    stem = stem.replace(" ", "_") or "BluBridge_Document"
+    return f"{stem}_{datetime.now(timezone.utc).date().isoformat()}.pdf"
+
+
+@api_router.post("/doc/import")
+async def doc_import(file: UploadFile = File(...),
+                     _: dict = Depends(require_auth)):
+    """Extract editable HTML content from an uploaded .docx / .pdf / .txt."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(raw) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File exceeds 15 MB limit.")
+    try:
+        html_content = import_to_html(file.filename or "", raw)
+    except ValueError as e:
+        raise HTTPException(status_code=415, detail=str(e))
+    except Exception:
+        logger.exception("doc import failed")
+        raise HTTPException(status_code=400,
+                            detail="Could not read that file. Try re-saving it as .docx, .pdf or .txt.")
+    return {"html": html_content, "filename": file.filename}
+
+
+@api_router.post("/doc/preview")
+async def doc_preview(req: DocRequest, _: dict = Depends(require_auth)):
+    """Render the document and return one image per page. The images are
+    rasterised from the very same PDF that /doc/generate returns, so the
+    preview and the download can never diverge."""
+    try:
+        pdf_bytes = build_doc_pdf(req.html, req.include_signature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("doc preview failed")
+        raise HTTPException(status_code=400, detail=f"Could not render the document: {e}")
+    pages = render_doc_preview(pdf_bytes)
+    return {"pages": pages, "count": len(pages),
+            "filename": _doc_filename(req.name)}
+
+
+@api_router.post("/doc/generate")
+async def doc_generate(req: DocRequest, _: dict = Depends(require_auth)):
+    try:
+        pdf_bytes = build_doc_pdf(req.html, req.include_signature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("doc generate failed")
+        raise HTTPException(status_code=400, detail=f"Could not render the document: {e}")
+    filename = _doc_filename(req.name)
+    await _save_history("doc", req.name or "Document", filename, pdf_bytes,
+                        summary={"include_signature": req.include_signature})
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
