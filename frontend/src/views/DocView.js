@@ -13,6 +13,13 @@ export default function DocView() {
   const [html, setHtml] = useState("");
   const [rteKey, setRteKey] = useState(0);
   const [includeSig, setIncludeSig] = useState(true);
+  const [sigStyle, setSigStyle] = useState("seal");
+  const [sigLeft, setSigLeft] = useState({ label: "RECIPIENT / ADVISOR", name: "", title: "Director" });
+  const [sigRight, setSigRight] = useState({ label: "BLUBRIDGE TECHNOLOGIES PRIVATE LIMITED", name: "", title: "Director" });
+  const [sigDate, setSigDate] = useState(() => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  });
 
   const [importing, setImporting] = useState(false);
   const [rendering, setRendering] = useState(false);
@@ -60,12 +67,20 @@ export default function DocView() {
     }
   }, [docName]);
 
+  const sigPayload = useMemo(() => ({
+    include_signature: includeSig,
+    signature_style: sigStyle,
+    sig_left: sigLeft,
+    sig_right: sigRight,
+    sig_date: sigDate,
+  }), [includeSig, sigStyle, sigLeft, sigRight, sigDate]);
+
   const onPreview = useCallback(async () => {
     setRendering(true); setError(null);
     try {
       const j = await apiJSON("/doc/preview", {
         method: "POST",
-        body: { name: docName, html, include_signature: includeSig },
+        body: { name: docName, html, ...sigPayload },
       });
       setPages(j.pages || []);
       setCurrent(0);
@@ -76,12 +91,12 @@ export default function DocView() {
     } finally {
       setRendering(false);
     }
-  }, [docName, html, includeSig]);
+  }, [docName, html, sigPayload]);
 
   const getPdf = useCallback(async () => {
     const res = await apiFetch("/doc/generate", {
       method: "POST",
-      body: { name: docName, html, include_signature: includeSig },
+      body: { name: docName, html, ...sigPayload },
     });
     if (!res.ok) {
       let detail = `HTTP ${res.status}`;
@@ -91,7 +106,7 @@ export default function DocView() {
     const disp = res.headers.get("Content-Disposition") || "";
     const m = disp.match(/filename="?([^"]+)"?/);
     return { blob: await res.blob(), filename: m ? m[1] : "BluBridge_Document.pdf" };
-  }, [docName, html, includeSig]);
+  }, [docName, html, sigPayload]);
 
   const onDownload = useCallback(async () => {
     setDownloading(true); setError(null);
@@ -209,6 +224,72 @@ export default function DocView() {
           />
           Include Company Seal &amp; Director Signature
         </label>
+
+        {includeSig && (
+          <div className="rounded-md border border-[#1a1a1f]/10 bg-[#f6f4ef] p-3 space-y-3">
+            <div className="flex items-center gap-5 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio" name="sig-style" value="seal"
+                  checked={sigStyle === "seal"}
+                  onChange={() => setSigStyle("seal")}
+                  data-testid="doc-sig-style-seal"
+                  className="w-4 h-4 accent-[#232369]"
+                />
+                Scanned seal &amp; signature
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio" name="sig-style" value="table"
+                  checked={sigStyle === "table"}
+                  onChange={() => setSigStyle("table")}
+                  data-testid="doc-sig-style-table"
+                  className="w-4 h-4 accent-[#232369]"
+                />
+                Two-column signature block
+              </label>
+            </div>
+
+            {sigStyle === "table" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[["left", sigLeft, setSigLeft], ["right", sigRight, setSigRight]].map(
+                  ([side, val, set]) => (
+                    <div key={side} className="space-y-2">
+                      <input
+                        type="text" value={val.label}
+                        onChange={(e) => set({ ...val, label: e.target.value })}
+                        data-testid={`doc-sig-${side}-label`}
+                        placeholder="Party heading"
+                        className="w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="text" value={val.name}
+                        onChange={(e) => set({ ...val, name: e.target.value })}
+                        data-testid={`doc-sig-${side}-name`}
+                        placeholder="Name"
+                        className="w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm"
+                      />
+                      <input
+                        type="text" value={val.title}
+                        onChange={(e) => set({ ...val, title: e.target.value })}
+                        data-testid={`doc-sig-${side}-title`}
+                        placeholder="Title"
+                        className="w-full rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm"
+                      />
+                    </div>
+                  )
+                )}
+                <input
+                  type="text" value={sigDate}
+                  onChange={(e) => setSigDate(e.target.value)}
+                  data-testid="doc-sig-date"
+                  placeholder="Date (dd/mm/yyyy)"
+                  className="w-full md:w-48 rounded-md border border-[#1a1a1f]/15 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {error && (
           <div

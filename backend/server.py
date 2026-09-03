@@ -887,10 +887,30 @@ async def get_status_checks():
 from doc_builder import build_pdf as build_doc_pdf, render_preview as render_doc_preview, import_to_html  # noqa: E402
 
 
+class DocSignatureParty(BaseModel):
+    label: str = Field(default="", max_length=120)
+    name:  str = Field(default="", max_length=120)
+    title: str = Field(default="", max_length=120)
+
+
 class DocRequest(BaseModel):
     name:              str = Field(default="", max_length=160)
     html:              str = Field(min_length=1, max_length=500_000)
     include_signature: bool = True
+    signature_style:   Literal["seal", "table"] = "seal"
+    sig_left:          DocSignatureParty = Field(default_factory=DocSignatureParty)
+    sig_right:         DocSignatureParty = Field(default_factory=DocSignatureParty)
+    sig_date:          str = Field(default="", max_length=40)
+
+
+def _sig_payload(req: "DocRequest") -> dict:
+    return {
+        "left":  {"label": req.sig_left.label or "RECIPIENT / ADVISOR",
+                  "name": req.sig_left.name, "title": req.sig_left.title},
+        "right": {"label": req.sig_right.label or "BLUBRIDGE TECHNOLOGIES PRIVATE LIMITED",
+                  "name": req.sig_right.name, "title": req.sig_right.title},
+        "date":  req.sig_date or datetime.now(timezone.utc).strftime("%d/%m/%Y"),
+    }
 
 
 def _doc_filename(name: str) -> str:
@@ -925,7 +945,8 @@ async def doc_preview(req: DocRequest, _: dict = Depends(require_auth)):
     rasterised from the very same PDF that /doc/generate returns, so the
     preview and the download can never diverge."""
     try:
-        pdf_bytes = build_doc_pdf(req.html, req.include_signature)
+        pdf_bytes = build_doc_pdf(req.html, req.include_signature,
+                                  req.signature_style, _sig_payload(req))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -939,7 +960,8 @@ async def doc_preview(req: DocRequest, _: dict = Depends(require_auth)):
 @api_router.post("/doc/generate")
 async def doc_generate(req: DocRequest, _: dict = Depends(require_auth)):
     try:
-        pdf_bytes = build_doc_pdf(req.html, req.include_signature)
+        pdf_bytes = build_doc_pdf(req.html, req.include_signature,
+                                  req.signature_style, _sig_payload(req))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -947,7 +969,8 @@ async def doc_generate(req: DocRequest, _: dict = Depends(require_auth)):
         raise HTTPException(status_code=400, detail=f"Could not render the document: {e}")
     filename = _doc_filename(req.name)
     await _save_history("doc", req.name or "Document", filename, pdf_bytes,
-                        summary={"include_signature": req.include_signature})
+                        summary={"include_signature": req.include_signature,
+                                 "signature_style": req.signature_style})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
