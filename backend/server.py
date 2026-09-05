@@ -978,6 +978,27 @@ async def doc_generate(req: DocRequest, _: dict = Depends(require_auth)):
     )
 
 
+@api_router.post("/doc/docx")
+async def doc_generate_docx(req: DocRequest, _: dict = Depends(require_auth)):
+    """Editable Word version of the same document (letterhead bands live in
+    the Word page header / footer so every page carries them)."""
+    from doc_docx import build_docx  # noqa: PLC0415 — keeps import cost off boot
+    try:
+        data = build_docx(req.html, req.include_signature,
+                          req.signature_style, _sig_payload(req))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("doc docx failed")
+        raise HTTPException(status_code=400, detail="Could not build the Word file.")
+    filename = _doc_filename(req.name).replace(".pdf", ".docx")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

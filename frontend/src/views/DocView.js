@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Upload, FileText, Loader2, Download, Printer, Eye, ZoomIn, ZoomOut,
-  Maximize2, ChevronUp, ChevronDown, AlertTriangle,
+  Maximize2, ChevronUp, ChevronDown, AlertTriangle, FileDown,
 } from "lucide-react";
 import { apiFetch, apiJSON, API } from "@/lib/api";
 import RichTextEditor from "../components/RichTextEditor";
@@ -24,6 +24,7 @@ export default function DocView() {
   const [importing, setImporting] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingDocx, setDownloadingDocx] = useState(false);
   const [error, setError] = useState(null);
   const [pages, setPages] = useState([]);
   const [zoom, setZoom] = useState(0.9);
@@ -93,8 +94,8 @@ export default function DocView() {
     }
   }, [docName, html, sigPayload]);
 
-  const getPdf = useCallback(async () => {
-    const res = await apiFetch("/doc/generate", {
+  const getFile = useCallback(async (path, fallbackName) => {
+    const res = await apiFetch(path, {
       method: "POST",
       body: { name: docName, html, ...sigPayload },
     });
@@ -105,24 +106,41 @@ export default function DocView() {
     }
     const disp = res.headers.get("Content-Disposition") || "";
     const m = disp.match(/filename="?([^"]+)"?/);
-    return { blob: await res.blob(), filename: m ? m[1] : "BluBridge_Document.pdf" };
+    return { blob: await res.blob(), filename: m ? m[1] : fallbackName };
   }, [docName, html, sigPayload]);
+
+  const getPdf = useCallback(
+    () => getFile("/doc/generate", "BluBridge_Document.pdf"), [getFile]);
+
+  const saveBlob = ({ blob, filename }) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const onDownload = useCallback(async () => {
     setDownloading(true); setError(null);
     try {
-      const { blob, filename } = await getPdf();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(await getPdf());
     } catch (err) {
       setError(err.message || "Download failed.");
     } finally {
       setDownloading(false);
     }
   }, [getPdf]);
+
+  const onDownloadDocx = useCallback(async () => {
+    setDownloadingDocx(true); setError(null);
+    try {
+      saveBlob(await getFile("/doc/docx", "BluBridge_Document.docx"));
+    } catch (err) {
+      setError(err.message || "Word download failed.");
+    } finally {
+      setDownloadingDocx(false);
+    }
+  }, [getFile]);
 
   const onPrint = useCallback(async () => {
     setError(null);
@@ -386,6 +404,15 @@ export default function DocView() {
               className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-md border border-[#1a1a1f]/15 bg-white hover:border-[#232369]/50"
             >
               <Printer size={14} /> Print
+            </button>
+            <button
+              type="button" onClick={onDownloadDocx} disabled={downloadingDocx}
+              data-testid="doc-download-docx"
+              className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-md border border-[#232369]/30 bg-white text-[#232369] hover:bg-[#232369]/8 disabled:opacity-50"
+            >
+              {downloadingDocx
+                ? (<><Loader2 size={14} className="animate-spin" /> Preparing…</>)
+                : (<><FileDown size={14} /> Download DOCX</>)}
             </button>
             <button
               type="button" onClick={onDownload} disabled={downloading} data-testid="doc-download"

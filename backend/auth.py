@@ -131,8 +131,14 @@ async def assert_not_locked(db, identifier: str):
         return
     if rec.get("count", 0) >= LOCKOUT_THRESHOLD:
         until = rec.get("locked_until")
-        if until and datetime.now(timezone.utc) < until:
-            wait = int((until - datetime.now(timezone.utc)).total_seconds())
+        # MongoDB hands back naive datetimes — normalise to UTC before any
+        # comparison, otherwise the login endpoint raises a TypeError (500)
+        # for every locked-out identifier.
+        if until is not None and until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if until and now < until:
+            wait = int((until - now).total_seconds())
             raise HTTPException(
                 status_code=429,
                 detail=f"Too many failed attempts. Try again in {wait}s.",

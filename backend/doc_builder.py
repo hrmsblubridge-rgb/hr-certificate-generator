@@ -60,6 +60,7 @@ BASE_P_MARGIN = 6.0
 BASE_H_MARGIN = 5.0
 BALANCE_STEPS = (1.13, 1.09, 1.06, 1.03)
 BALANCE_MIN_LEFTOVER = 22.0
+_TABLE_AVAIL = CONTENT_W - 6      # usable width for imported table columns
 
 _FONT_CSS = (
     '@font-face { font-family: bbdoc; src: url("ArialMT.ttf"); }\n'
@@ -359,20 +360,39 @@ def _place_seal(lay: _Layout):
 
 
 def signature_table_html(left: dict, right: dict, date_str: str) -> str:
-    """Two-column signature block: labels on top, then Signature / Name /
-    Title / Date lines — mirrors the customer's contract layout."""
+    """Two-column signature block — equal 50% columns across the full content
+    width, with clear space above the Signature line for the seal / wet
+    signature. Mirrors the customer's contract layout."""
+    half = int((CONTENT_W - 32) / 2)   # equal 50% columns across the text width
+
     def cell(party: dict) -> str:
         return (
-            "<td>"
-            f"<p><b>{_html.escape(party.get('label', ''))}</b></p>"
-            "<p>&nbsp;</p><p>&nbsp;</p>"
+            f'<td style="width:{half}px">'
+            f'<p style="font-size:9.5px"><b>{_html.escape(party.get("label", ""))}</b></p>'
+            '<p>&nbsp;</p><p>&nbsp;</p><p>&nbsp;</p><p>&nbsp;</p>'
             "<p>Signature:</p>"
-            f"<p>Name: <b>{_html.escape(party.get('name', ''))}</b></p>"
-            f"<p>Title: <b>{_html.escape(party.get('title', ''))}</b></p>"
+            f"<p>Name: {_html.escape(party.get('name', ''))}</p>"
+            f"<p>Title: {_html.escape(party.get('title', ''))}</p>"
             f"<p>Date : {_html.escape(date_str)}</p>"
             "</td>"
         )
     return "<table><tr>" + cell(left) + cell(right) + "</tr></table>"
+
+
+def _is_heading_like(block: dict) -> bool:
+    """True for real headings AND for short all-bold paragraphs such as
+    '10. CONFIDENTIALITY' — Word documents number their clause titles that way
+    and they must never be orphaned at the bottom of a page."""
+    if block.get("kind") != "flow":
+        return False
+    if block.get("tag") in _HEADINGS:
+        return True
+    html_frag = block.get("html") or ""
+    text = _html.unescape(re.sub(r"<[^>]+>", "", html_frag)).strip()
+    if not text or len(text) > 90:
+        return False
+    inner = re.sub(r"^<p[^>]*>|</p>$", "", html_frag.strip(), flags=re.I).strip()
+    return bool(re.fullmatch(r"<(b|strong)>.*</(b|strong)>", inner, flags=re.I | re.S))
 
 
 def _paginate(blocks: list[dict]) -> _Layout:
@@ -390,9 +410,10 @@ def _paginate(blocks: list[dict]) -> _Layout:
             continue
 
         h = _measure(b["html"])
-        # A heading must never be orphaned — it travels with the next block,
-        # but only break if the PAIR genuinely does not fit in what is left.
-        if b.get("tag") in _HEADINGS and i + 1 < len(blocks):
+        # A heading (or bold clause title) must never be orphaned — it travels
+        # with the next block, but only break if the PAIR genuinely does not
+        # fit in what is left on this page.
+        if _is_heading_like(b) and i + 1 < len(blocks):
             nxt = blocks[i + 1]
             nxt_html = (_table_html(nxt["head"], nxt["rows"])
                         if nxt["kind"] == "table" else nxt["html"])
@@ -618,10 +639,24 @@ def docx_to_html(data: bytes) -> str:
         return "".join(chunks) or "<p>&nbsp;</p>"
 
     def _table_to_html(table) -> str:
+        # Preserve the authored column proportions, scaled to the letterhead
+        # text width so nothing overflows.
+        try:
+            raw = [c.width.pt if c.width else 0 for c in table.columns]
+        except Exception:
+            raw = []
+        widths: list[int] = []
+        if raw and all(w > 0 for w in raw):
+            avail = _TABLE_AVAIL
+            total = sum(raw)
+            widths = [max(int(avail * w / total) - 14, 30) for w in raw]
         rows_html = []
         for row in table.rows:
-            cells = "".join(f"<td>{cell_html(c)}</td>" for c in row.cells)
-            rows_html.append(f"<tr>{cells}</tr>")
+            cells = []
+            for i, c in enumerate(row.cells):
+                attr = f' style="width:{widths[i]}px"' if i < len(widths) else ""
+                cells.append(f"<td{attr}>{cell_html(c)}</td>")
+            rows_html.append("<tr>" + "".join(cells) + "</tr>")
         return "<table>" + "".join(rows_html) + "</table>"
 
     for child in doc.element.body.iterchildren():
