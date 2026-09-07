@@ -215,6 +215,8 @@ spacing, margins, header, footer, logo, signature, layout).
 
 - **v21 (2026-09-07)** Offer Letter (Email): Gmail was auto-linkifying the candidate's postal address into a blue "map" link. `offer_letter_email.py` now passes address lines through `_no_autolink()`, which injects invisible zero-width spaces (`&#8203;`) inside digit runs and after commas — the pattern matcher no longer recognises an address while the rendered/printed text is byte-identical to the eye. Address renders with 0 `<a>` tags in the preview. (Phone number left untouched per the request.)
 
+- **v21.1 (2026-09-07)** Extended `_no_autolink()` to the **phone number and e-mail address** too (zero-width space inserted around `@` and inside digit runs), so the Annexure-D contact block in the Offer Letter e-mail renders with zero links. Confirmed neither `[email]` nor `[phone]` sits inside an `href` in the source template, so nothing clickable was broken.
+
 ## Verification (v2)
 - `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`
 - Downloaded PDF: 0 form fields, all 4 values present in content stream, original Aravind values removed, all surrounding wording / signature / footer intact
