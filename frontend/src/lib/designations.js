@@ -27,4 +27,6 @@ export const DESIGNATIONS = [
   "Marketing Intern",
   "HR Intern",
   "Research Intern",
+  "AI Business Solutions Executive",
+  "IT Systems & Infrastructure Administrator",
 ];

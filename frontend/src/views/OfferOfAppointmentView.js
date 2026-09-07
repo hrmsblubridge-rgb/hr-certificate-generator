@@ -20,6 +20,7 @@ const DESIGNATIONS = [
   "Research Scientist", "AI Research Analyst", "AI Research Intern",
   "Software Engineer", "Senior Software Engineer", "Data Scientist",
   "Data Analyst", "Product Manager", "HR Executive",
+  "AI Business Solutions Executive", "IT Systems & Infrastructure Administrator",
 ];
 
 function Field({ label, required, children }) {

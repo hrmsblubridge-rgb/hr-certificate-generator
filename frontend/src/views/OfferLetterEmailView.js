@@ -359,6 +359,8 @@ const DESIGNATIONS = [
   "Data Analyst",
   "Product Manager",
   "HR Executive",
+  "AI Business Solutions Executive",
+  "IT Systems & Infrastructure Administrator",
 ];
 
 function isoDateToday() {
