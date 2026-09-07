@@ -213,6 +213,8 @@ spacing, margins, header, footer, logo, signature, layout).
 
 - **v20 (2026-09-07)** Offer Letter (Email) preview edit mode now has a **formatting toolbar** (`data-testid=oe-edit-toolbar`): Bold / Italic / Underline and Align left / **Center** / Align right / Justify, driven through the iframe document's `execCommand` with `styleWithCSS` so the applied styles survive Save, Download HTML and Send. Buttons use `onMouseDown preventDefault` so the text selection inside the preview is not lost. Verified: selecting a heading and pressing Center applies `text-align:center`, and Save persists it into the outgoing HTML.
 
+- **v21 (2026-09-07)** Offer Letter (Email): Gmail was auto-linkifying the candidate's postal address into a blue "map" link. `offer_letter_email.py` now passes address lines through `_no_autolink()`, which injects invisible zero-width spaces (`&#8203;`) inside digit runs and after commas — the pattern matcher no longer recognises an address while the rendered/printed text is byte-identical to the eye. Address renders with 0 `<a>` tags in the preview. (Phone number left untouched per the request.)
+
 ## Verification (v2)
 - `POST /api/template/generate` returns `application/pdf` 200 OK with proper `Content-Disposition: attachment`
 - Downloaded PDF: 0 form fields, all 4 values present in content stream, original Aravind values removed, all surrounding wording / signature / footer intact

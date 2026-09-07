@@ -304,6 +304,18 @@ _REF_TABLE_RE = re.compile(
 )
 
 
+_ZWSP = "&#8203;"
+
+
+def _no_autolink(value: str) -> str:
+    """Gmail turns postal addresses into blue "map" links. Splitting the
+    pattern with invisible zero-width spaces stops the detector — the text
+    still reads and prints exactly the same."""
+    text = str(value or "")
+    text = re.sub(r"(\d{3})(?=\d)", r"\1" + _ZWSP, text)
+    return text.replace(",", "," + _ZWSP)
+
+
 def render_offer_letter(data: dict) -> str:
     """Substitute placeholders + (standard mode) rebuild the Annexure-A
     compensation table. Returns a complete self-contained HTML document."""
@@ -336,9 +348,9 @@ def render_offer_letter(data: dict) -> str:
         "cur_date":         today_iso,
         "title":            data["title"],
         "name":             data["name"],
-        "address_line1":    data["address_line1"],
-        "address_line2":    data["address_line2"],
-        "address_line3":    data["address_line3"],
+        "address_line1":    _no_autolink(data["address_line1"]),
+        "address_line2":    _no_autolink(data["address_line2"]),
+        "address_line3":    _no_autolink(data["address_line3"]),
         "phone":            data["phone"],
         "email":            data["email"],
         "date":             data["date"],
