@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Loader2, FileText, Download, ExternalLink, X, Pencil, Check, Send, Mail } from "lucide-react";
+import { Loader2, FileText, Download, ExternalLink, X, Pencil, Check, Send, Mail,
+  Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify } from "lucide-react";
 import { apiJSON } from "@/lib/api";
 
 // ---- shared field components --------------------------------------------
@@ -104,6 +105,15 @@ function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateNa
     setEditing((v) => !v);
   };
 
+  const exec = (cmd, value) => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    try {
+      doc.execCommand("styleWithCSS", false, true);
+      doc.execCommand(cmd, false, value ?? null);
+    } catch { /* command unsupported in this browser */ }
+  };
+
   const onSend = async () => {
     setSendResult(null);
     if (!toEmail || !/^\S+@\S+\.\S+$/.test(toEmail)) {
@@ -206,6 +216,43 @@ function PreviewModal({ html: initialHtml, filename, candidateEmail, candidateNa
             </button>
           </div>
         </div>
+        {editing && (
+          <div
+            data-testid="oe-edit-toolbar"
+            className="flex items-center gap-1 px-5 py-2 border-b border-[#1a1a1f]/10 bg-white flex-wrap"
+          >
+            {[
+              ["bold", "Bold", Bold],
+              ["italic", "Italic", Italic],
+              ["underline", "Underline", Underline],
+              ["|", "", null],
+              ["justifyLeft", "Align left", AlignLeft],
+              ["justifyCenter", "Center", AlignCenter],
+              ["justifyRight", "Align right", AlignRight],
+              ["justifyFull", "Justify", AlignJustify],
+            ].map(([cmd, label, Icon], i) =>
+              cmd === "|" ? (
+                <span key={`sep-${i}`} className="w-px h-5 bg-[#1a1a1f]/10 mx-1" />
+              ) : (
+                <button
+                  key={cmd}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  data-testid={`oe-edit-${cmd.toLowerCase()}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => exec(cmd)}
+                  className="w-8 h-8 grid place-items-center rounded-md text-[#1a1a1f]/70 hover:bg-[#f6f4ef] hover:text-[#232369] transition-colors"
+                >
+                  <Icon size={15} />
+                </button>
+              )
+            )}
+            <span className="ml-2 text-[11px] text-[#1a1a1f]/45">
+              Select text in the preview, then apply formatting
+            </span>
+          </div>
+        )}
         <iframe
           ref={iframeRef}
           data-testid="oe-preview-iframe"
